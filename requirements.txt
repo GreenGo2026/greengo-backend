@@ -1,0 +1,26 @@
+# ── Web framework & server ─────────────────────────────────────────────────
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+
+# ── Async MongoDB driver ───────────────────────────────────────────────────
+motor==3.6.0
+pymongo==4.10.1          # motor peer-dependency; pin to avoid surprises
+
+# ── Data validation (Pydantic V2) ──────────────────────────────────────────
+pydantic==2.9.2
+pydantic-settings==2.6.1  # BaseSettings / get_settings()
+
+# ── Twilio (WhatsApp webhook) ──────────────────────────────────────────────
+twilio==9.3.7
+
+# ── HTTP client (Gemini API calls) ────────────────────────────────────────
+httpx==0.27.2
+
+# ── BSON helpers (ObjectId validation) ────────────────────────────────────
+bson==0.5.10              # thin standalone package — already pulled by pymongo
+                          # listed explicitly so imports are unambiguous
+
+# ── Python standard-library back-fills (none needed for 3.11+) ────────────
+# python-dotenv is NOT required — pydantic-settings reads .env natively
+# If your platform needs it explicitly, uncomment the line below:
+# python-dotenv==1.0.1

@@ -1,0 +1,48 @@
+# ── Python bytecode & caches ───────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ── Virtual environments ───────────────────────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+
+# ── Environment / secrets — NEVER commit these ────────────────────────────
+.env
+.env.*
+!.env.example          # allow a safe template with no real values
+
+# ── OS noise ──────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── IDE / editor configs ───────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ── Build & dist artefacts ────────────────────────────────────────────────
+dist/
+build/
+*.egg-info/
+*.egg
+
+# ── Logs & local test output ──────────────────────────────────────────────
+*.log
+logs/
+htmlcov/
+.coverage
+
+# ── Jupyter (if used for data exploration) ────────────────────────────────
+.ipynb_checkpoints/
+
+# ── Render / Railway platform files you don't want versioned ──────────────
+.render-buildpacks.json
