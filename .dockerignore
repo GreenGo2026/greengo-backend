@@ -1,0 +1,58 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# GreenGo Market — .dockerignore
+#
+# Everything listed here is excluded from the Docker build context.
+# Smaller context = faster builds and no accidental secret leakage.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Secrets — NEVER bake into the image ──────────────────────────────────────
+.env
+.env.*
+*.pem
+*.key
+secrets/
+
+# ── Python artefacts ─────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+.Python
+
+# ── Virtual environments ──────────────────────────────────────────────────────
+venv/
+.venv/
+env/
+ENV/
+
+# ── Git ───────────────────────────────────────────────────────────────────────
+.git/
+.gitignore
+.gitattributes
+
+# ── IDE / editor configs ──────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# ── Test & dev tooling ────────────────────────────────────────────────────────
+tests/
+.pytest_cache/
+.coverage
+htmlcov/
+pytest.ini
+setup.cfg
+
+# ── CI / documentation ────────────────────────────────────────────────────────
+.github/
+docs/
+*.md
+LICENSE
+
+# ── Local dev scripts ────────────────────────────────────────────────────────
+seed_catalog.py
+docker-compose*.yml
+Makefile

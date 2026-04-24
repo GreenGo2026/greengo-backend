@@ -1,0 +1,349 @@
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&family=Cairo:wght@400;600;700;800;900&family=Poppins:wght@400;500;600;700;800&family=Montserrat:wght@400;500;600;700;800&display=swap');
+
+/* ═══════════════════════════════════════════════════════════════
+   GreenGo — Moroccan Night Market Theme
+   Deep emerald + gold zellige + cream floating cards
+   ═══════════════════════════════════════════════════════════════ */
+
+
+:root {
+  --gg-dark:      #061a12;
+  --gg-deep:      #0a2318;
+  --gg-emerald:   #0f3d22;
+  --gg-green:     #2E8B57;
+  --gg-mint:      #34a368;
+  --gg-gold:      #C9A96E;
+  --gg-gold-lt:   #e8c98a;
+  --gg-cream:     #faf7f0;
+  --gg-card:      rgba(250, 247, 240, 0.97);
+}
+
+/* ── Global page background ── */
+body {
+  background-color: var(--gg-dark);
+  background-image:
+    radial-gradient(ellipse 80% 60% at 20% 0%,  rgba(46,139,87,0.18) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 80% at 80% 100%, rgba(15,61,34,0.40) 0%, transparent 60%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 80 80'%3E%3Cg fill='none' stroke='%23C9A96E' stroke-width='0.35' opacity='0.13'%3E%3Cpolygon points='40,5 47,18 62,18 51,27 55,42 40,34 25,42 29,27 18,18 33,18'/%3E%3Cpolygon points='40,14 44,22 53,22 46,28 49,37 40,32 31,37 34,28 27,22 36,22'/%3E%3Cline x1='40' y1='5' x2='40' y2='75'/%3E%3Cline x1='5' y1='40' x2='75' y2='40'/%3E%3Cline x1='10' y1='10' x2='70' y2='70'/%3E%3Cline x1='70' y1='10' x2='10' y2='70'/%3E%3Ccircle cx='40' cy='40' r='22'/%3E%3Ccircle cx='40' cy='40' r='10'/%3E%3C/g%3E%3C/svg%3E");
+  background-size: auto, auto, 80px 80px;
+  min-height: 100vh;
+  font-family: 'DM Sans', sans-serif;
+}
+
+/* ── Floating card style ── */
+.gg-card {
+  background: var(--gg-card);
+  border-radius: 1.25rem;
+  box-shadow:
+    0 0 0 1px rgba(201,169,110,0.12),
+    0 4px 6px -1px rgba(0,0,0,0.35),
+    0 20px 40px -8px rgba(0,0,0,0.45);
+}
+
+/* ── Gold accent text ── */
+.gg-gold { color: var(--gg-gold); }
+.gg-gold-lt { color: var(--gg-gold-lt); }
+
+/* ── Section header with gold underline ── */
+.gg-section-title {
+  font-family: 'Cormorant Garamond', serif;
+  color: var(--gg-gold-lt);
+  letter-spacing: 0.02em;
+}
+
+/* ── Hero gradient ── */
+.gg-hero {
+  background:
+    radial-gradient(ellipse 100% 120% at 0% 50%, rgba(46,139,87,0.25) 0%, transparent 55%),
+    linear-gradient(160deg, #061a12 0%, #0a2318 40%, #061a12 100%);
+  border-bottom: 1px solid rgba(201,169,110,0.15);
+}
+
+/* ── Product card on dark bg ── */
+.gg-product-card {
+  background: var(--gg-card);
+  border: 1px solid rgba(201,169,110,0.10);
+  border-radius: 1rem;
+  box-shadow:
+    0 2px 4px rgba(0,0,0,0.3),
+    0 12px 24px rgba(0,0,0,0.4),
+    0 0 0 1px rgba(201,169,110,0.06);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+.gg-product-card:hover {
+  transform: translateY(-4px);
+  box-shadow:
+    0 4px 8px rgba(0,0,0,0.4),
+    0 20px 40px rgba(0,0,0,0.5),
+    0 0 0 1px rgba(201,169,110,0.18),
+    0 0 30px rgba(46,139,87,0.08);
+}
+
+/* ── Gold divider ── */
+.gg-divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(201,169,110,0.4), transparent);
+  margin: 1.5rem 0;
+}
+
+/* ── Category pill ── */
+.gg-pill {
+  background: rgba(46,139,87,0.15);
+  border: 1px solid rgba(46,139,87,0.35);
+  color: #6ee7a0;
+  border-radius: 9999px;
+  padding: 0.375rem 1rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+.gg-pill:hover, .gg-pill.active {
+  background: var(--gg-green);
+  border-color: var(--gg-green);
+  color: white;
+  box-shadow: 0 4px 14px rgba(46,139,87,0.4);
+}
+.gg-pill.active {
+  background: linear-gradient(135deg, var(--gg-green), var(--gg-mint));
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--gg-dark); }
+::-webkit-scrollbar-thumb { background: rgba(201,169,110,0.3); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(201,169,110,0.5); }
+
+/* ── Existing zellige classes (keep) ── */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-primary:       #2E8B57;
+  --color-primary-light: #3CAE6E;
+  --color-primary-dark:  #1F6B40;
+  --color-accent:        #FF9800;
+  --color-accent-light:  #FFB74D;
+  --color-accent-dark:   #E65100;
+  --color-terracotta:    #C0614A;
+  --color-mint:          #4DB882;
+  --color-sand:          #C9A96E;
+  --color-zellige:       #0d3b36;
+  --color-ivory:         #FAF7F2;
+  --zellige-border: repeating-linear-gradient(
+    90deg,
+    #FF9800  0px,  #FF9800  6px,
+    #2E8B57  6px,  #2E8B57 12px,
+    #0d3b36 12px,  #0d3b36 18px,
+    #2E8B57 18px,  #2E8B57 24px
+  );
+  --radius-card: 1.25rem;
+  --radius-btn:  0.875rem;
+  --radius-pill: 50px;
+}
+
+@layer base {
+  html { scroll-behavior: smooth; -webkit-tap-highlight-color: transparent; }
+  body {
+    background-color: var(--color-ivory);
+    color: #1a1a1a;
+    font-family: "Poppins", "Montserrat", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  [dir="rtl"] body, [lang="ar"] body, [lang="ar"] * {
+    font-family: "Tajawal", "Cairo", sans-serif;
+  }
+  *:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 3px;
+    border-radius: 6px;
+  }
+  button, a { -webkit-tap-highlight-color: transparent; }
+}
+
+@layer components {
+
+  .zellige-bg-light {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60' viewBox='0 0 60 60'%3E%3Cg fill='none' stroke='%23ffffff' stroke-width='0.7' opacity='0.15'%3E%3Cpolygon points='30,4 37,17 52,17 41,26 45,41 30,33 15,41 19,26 8,17 23,17'/%3E%3Cline x1='30' y1='4' x2='30' y2='56'/%3E%3Cline x1='4' y1='30' x2='56' y2='30'/%3E%3Cline x1='8' y1='8' x2='52' y2='52'/%3E%3Cline x1='52' y1='8' x2='8' y2='52'/%3E%3C/g%3E%3C/svg%3E");
+    background-size: 60px 60px;
+    background-repeat: repeat;
+  }
+
+  .zellige-bg-dark {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60' viewBox='0 0 60 60'%3E%3Cg fill='none' stroke='%232E8B57' stroke-width='0.7' opacity='0.25'%3E%3Cpolygon points='30,4 37,17 52,17 41,26 45,41 30,33 15,41 19,26 8,17 23,17'/%3E%3Cline x1='30' y1='4' x2='30' y2='56'/%3E%3Cline x1='4' y1='30' x2='56' y2='30'/%3E%3Cline x1='8' y1='8' x2='52' y2='52'/%3E%3Cline x1='52' y1='8' x2='8' y2='52'/%3E%3C/g%3E%3C/svg%3E");
+    background-size: 60px 60px;
+    background-repeat: repeat;
+  }
+
+  .zellige-bg-sand {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60' viewBox='0 0 60 60'%3E%3Cg fill='none' stroke='%23C9A96E' stroke-width='0.6' opacity='0.18'%3E%3Cpolygon points='30,4 37,17 52,17 41,26 45,41 30,33 15,41 19,26 8,17 23,17'/%3E%3Cline x1='30' y1='4' x2='30' y2='56'/%3E%3Cline x1='4' y1='30' x2='56' y2='30'/%3E%3Cline x1='8' y1='8' x2='52' y2='52'/%3E%3Cline x1='52' y1='8' x2='8' y2='52'/%3E%3C/g%3E%3C/svg%3E");
+    background-size: 60px 60px;
+    background-repeat: repeat;
+  }
+
+  .zellige-border {
+    height: 3px;
+    background-image: var(--zellige-border);
+  }
+
+  .divider-zellige {
+    height: 3px;
+    background-image: var(--zellige-border);
+    border: none;
+  }
+
+  .glass-card {
+    background: rgba(255,255,255,0.82);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(46,139,87,0.10);
+    box-shadow: 0 4px 24px 0 rgba(46,139,87,0.10);
+    border-radius: var(--radius-card);
+  }
+
+  .hero-gradient {
+    background: linear-gradient(135deg, #0d3b36 0%, #1a5c4a 55%, #2E8B57 100%);
+  }
+
+  .brand-gradient {
+    background: linear-gradient(135deg, #2E8B57 0%, #3CAE6E 50%, #FF9800 100%);
+  }
+
+  .brand-gradient-reverse {
+    background: linear-gradient(135deg, #FF9800 0%, #FFB74D 50%, #2E8B57 100%);
+  }
+
+  .terracotta-gradient {
+    background: linear-gradient(135deg, #C0614A 0%, #e87558 100%);
+  }
+
+  .sand-gradient {
+    background: linear-gradient(135deg, #C9A96E 0%, #e8c886 100%);
+  }
+
+  .btn-primary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: 0.75rem;
+    background-color: #2E8B57;
+    padding: 0.75rem 1.5rem;
+    font-size: 0.875rem;
+    font-weight: 700;
+    color: #ffffff;
+    box-shadow: 0 4px 12px rgba(46,139,87,0.25);
+    transition: all 0.15s ease;
+  }
+  .btn-primary:hover { background-color: #1F6B40; box-shadow: 0 6px 20px rgba(46,139,87,0.35); }
+  .btn-primary:active { transform: scale(0.95); }
+
+  .btn-accent {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: 0.75rem;
+    background-color: #FF9800;
+    padding: 0.75rem 1.5rem;
+    font-size: 0.875rem;
+    font-weight: 700;
+    color: #ffffff;
+    box-shadow: 0 4px 12px rgba(255,152,0,0.25);
+    transition: all 0.15s ease;
+  }
+  .btn-accent:hover { background-color: #E65100; box-shadow: 0 6px 20px rgba(255,152,0,0.35); }
+  .btn-accent:active { transform: scale(0.95); }
+  .btn-accent:disabled { background-color: #e5e7eb; color: #9ca3af; box-shadow: none; cursor: not-allowed; }
+
+  .btn-ghost {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: 0.75rem;
+    border: 1px solid rgba(46,139,87,0.30);
+    padding: 0.75rem 1.5rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #2E8B57;
+    background: transparent;
+    transition: all 0.15s ease;
+  }
+  .btn-ghost:hover { background-color: rgba(46,139,87,0.08); border-color: #2E8B57; }
+  .btn-ghost:active { transform: scale(0.95); }
+
+  .product-card {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border-radius: 1rem;
+    background-color: #ffffff;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.04);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+  .product-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(46,139,87,0.14), 0 0 0 1px rgba(0,0,0,0.04);
+  }
+
+  .status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    border-radius: 9999px;
+    padding: 0.25rem 0.75rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+  }
+  .status-pending          { background-color: #fff8e1; color: #d97706; box-shadow: 0 0 0 1px #fde68a; }
+  .status-preparing        { background-color: #eff6ff; color: #2563eb; box-shadow: 0 0 0 1px #bfdbfe; }
+  .status-out_for_delivery { background-color: #f5f3ff; color: #7c3aed; box-shadow: 0 0 0 1px #ddd6fe; }
+  .status-delivered        { background-color: #f0fdf4; color: #16a34a; box-shadow: 0 0 0 1px #bbf7d0; }
+  .status-completed        { background-color: #f0faf4; color: #2E8B57; box-shadow: 0 0 0 1px #b8eacc; }
+  .status-cancelled        { background-color: #fef2f2; color: #dc2626; box-shadow: 0 0 0 1px #fecaca; }
+
+  .input-field {
+    width: 100%;
+    border-radius: 0.75rem;
+    border: 1px solid #e5e7eb;
+    background-color: #ffffff;
+    padding: 0.625rem 0.75rem;
+    font-size: 0.875rem;
+    color: #1f2937;
+    outline: none;
+    transition: border-color 0.15s ease, background-color 0.15s ease;
+  }
+  .input-field::placeholder { color: #d1d5db; }
+  .input-field:focus { border-color: #2E8B57; background-color: #f0faf4; }
+  [dir="rtl"] .input-field { text-align: right; }
+}
+
+@layer utilities {
+  .card-lift { transition: transform 0.2s ease, box-shadow 0.2s ease; }
+  .card-lift:hover { transform: translateY(-4px); box-shadow: 0 12px 32px rgba(46,139,87,0.15); }
+
+  .skeleton {
+    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s linear infinite;
+  }
+
+  .font-arabic { font-family: "Tajawal", "Cairo", sans-serif; }
+
+  .line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+  .scrollbar-hide::-webkit-scrollbar { display: none; }
+}

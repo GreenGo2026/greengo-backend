@@ -42,6 +42,8 @@ class OrderStatus(str, Enum):
     preparing        = "preparing"
     out_for_delivery = "out_for_delivery"
     delivered        = "delivered"
+    completed        = "completed"   # terminal — added for Admin Dashboard
+    cancelled        = "cancelled"   # terminal — added for Admin Dashboard
 
 
 # ---------------------------------------------------------------------------
@@ -149,10 +151,20 @@ class WhatsAppOrderCreate(BaseModel):
     Persisted immediately after the Gemini NLP call inside the webhook.
     Kept separate from OrderCreateModel so the two flows (PWA vs WhatsApp)
     can evolve independently without schema conflicts.
+
+    total_price is calculated from prices.json before insertion.
+    It defaults to 0.0 if no items match the catalog (e.g. unknown product
+    names) so the order is still saved and visible in the Admin Dashboard.
     """
     customer_phone : str
     raw_message    : str
     parsed_items   : list[WhatsAppOrderItem] = []
+    total_price    : float                   = Field(
+        default=0.0,
+        ge=0.0,
+        description="Calculated from prices.json at webhook time. "
+                    "0.0 means no catalog match was found.",
+    )
     status         : OrderStatus             = OrderStatus.pending
     created_at     : datetime                = Field(
         default_factory=lambda: datetime.now(timezone.utc)
@@ -176,32 +188,44 @@ class OrderResponseModel(BaseModel):
 
     Designed to be constructed directly from a raw MongoDB document:
 
-        doc["_id"] is coerced to str via PyObjectId
+        doc["_id"]            is coerced to str via PyObjectId
         doc["customer_phone"] maps to whatsapp_sender
         doc["parsed_items"]   maps to items (list[WhatsAppOrderItem])
         doc["status"]         maps to OrderStatus enum
         doc["created_at"]     is a timezone-aware UTC datetime
-
-    Usage in a route:
-        OrderResponseModel(
-            id=str(doc["_id"]),
-            whatsapp_sender=doc["customer_phone"],
-            items=doc.get("parsed_items", []),
-            status=doc["status"],
-            created_at=doc["created_at"],
-        )
+        doc["total_price"]    is now included and surfaced to the dashboard
     """
 
     model_config = ConfigDict(
-        populate_by_name=True,      # accept both "id" and "_id"
+        populate_by_name=True,
         arbitrary_types_allowed=True,
     )
 
-    id              : str                    = Field(..., description="Stringified MongoDB ObjectId")
-    whatsapp_sender : str                    = Field(..., description="Customer WhatsApp phone number")
-    items           : list[WhatsAppOrderItem] = Field(default_factory=list, description="Parsed order items")
-    status          : OrderStatus            = Field(..., description="Current order status")
-    created_at      : datetime               = Field(..., description="UTC timestamp of order creation")
+    id              : str                     = Field(..., description="Stringified MongoDB ObjectId")
+    whatsapp_sender : str                     = Field(..., description="Customer WhatsApp phone number")
+    items           : list[WhatsAppOrderItem] = Field(default_factory=list)
+    total_price     : float                   = Field(
+        default=0.0,
+        description="Calculated order total in MAD. 0.0 if catalog had no match.",
+    )
+    status          : OrderStatus             = Field(..., description="Current order status")
+    created_at      : datetime                = Field(..., description="UTC timestamp of order creation")
+
+
+# ---------------------------------------------------------------------------
+# Catalog — JSON price list response model
+# ---------------------------------------------------------------------------
+
+class CatalogItem(BaseModel):
+    """
+    Single product entry as returned by GET /api/v1/catalog.
+    Mirrors the shape of one value inside prices.json, plus the Arabic key
+    surfaced as `name` so the frontend never has to deal with raw dict keys.
+    """
+    name           : str
+    price_per_unit : float
+    unit           : str
+    available      : bool
 
 
 # ---------------------------------------------------------------------------

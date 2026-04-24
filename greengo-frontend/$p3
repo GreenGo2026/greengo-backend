@@ -1,0 +1,372 @@
+﻿// src/pages/HomePage.tsx
+import { useEffect, useState, useMemo } from "react";
+import {
+  ShoppingCart, Plus, Minus, Loader2, RefreshCw,
+  AlertCircle, Search, SlidersHorizontal, Leaf,
+  CheckCircle,
+} from "lucide-react";
+import { getProducts } from "../services/api";
+import type { DBProduct } from "../services/api";
+import { useCartStore, getUnitStep, formatQuantity } from "../store/cartStore";
+import { useLanguage } from "../contexts/LanguageContext";
+
+// ── Strict niche categories ───────────────────────────────────────────────────
+type NicheKey = "all" | "Fruits" | "Vegetables" | "Whole Chicken" | "Chicken Cuts";
+
+interface NicheCategory {
+  key:      NicheKey;
+  emoji:    string;
+  label_fr: string;
+  label_ar: string;
+  label_en: string;
+  db_match: string[];   // matches product.category from MongoDB
+}
+
+const CATEGORIES: NicheCategory[] = [
+  { key: "all",           emoji: "\u2728",  label_fr: "Tout",            label_ar: "\u0627\u0644\u0643\u0644",              label_en: "All",           db_match: [] },
+  { key: "Fruits",        emoji: "\ud83c\udf4e",  label_fr: "Fruits",          label_ar: "\u0641\u0648\u0627\u0643\u0647",          label_en: "Fruits",        db_match: ["Fruits", "fruits"] },
+  { key: "Vegetables",    emoji: "\ud83e\udd55",  label_fr: "Légumes",         label_ar: "\u062e\u0636\u0631\u0648\u0627\u062a",    label_en: "Vegetables",    db_match: ["Vegetables", "vegetables", "Légumes"] },
+  { key: "Whole Chicken", emoji: "\ud83c\udf57",  label_fr: "Poulet entier",   label_ar: "\u062f\u062c\u0627\u062c\u0629 \u0643\u0627\u0645\u0644\u0629", label_en: "Whole Chicken", db_match: ["White Meats", "Whole Chicken", "Poulet entier"] },
+  { key: "Chicken Cuts",  emoji: "\ud83e\udd69",  label_fr: "Découpes poulet", label_ar: "\u0642\u0637\u0639 \u0627\u0644\u062f\u062c\u0627\u062c",     label_en: "Chicken Cuts",  db_match: ["Chicken Cuts", "Découpes", "Eggs"] },
+];
+
+function catLabel(cat: NicheCategory, lang: string): string {
+  if (lang === "ar") return cat.label_ar;
+  if (lang === "fr") return cat.label_fr;
+  return cat.label_en;
+}
+
+// ── Cart quick-add button ─────────────────────────────────────────────────────
+function QtyControl({ product }: { product: DBProduct }) {
+  const cart        = useCartStore((s) => s.cart);
+  const addToCart   = useCartStore((s) => s.addToCart);
+  const removeItem  = useCartStore((s) => s.removeFromCart);
+  const { language } = useLanguage();
+  const font = language === "ar" ? "font-arabic" : "font-latin";
+
+  const catalogProduct = {
+    name: product.name_ar,
+    price_per_unit: product.price_mad,
+    unit: product.unit,
+    available: product.in_stock,
+  };
+  const step = getUnitStep(product.unit);
+  const cartItem = cart.find((i) => i.name === product.name_ar);
+  const qty = cartItem?.cartQuantity ?? 0;
+
+  if (!product.in_stock) {
+    return (
+      <div className={"flex h-10 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 text-xs font-semibold text-gray-400 " + font}>
+        {language === "ar" ? "\u063a\u064a\u0631 \u0645\u062a\u0648\u0641\u0631" : language === "fr" ? "Épuisé" : "Out of stock"}
+      </div>
+    );
+  }
+
+  if (qty === 0) {
+    return (
+      <button
+        onClick={() => addToCart(catalogProduct, step)}
+        className={"flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-[#2E8B57] text-xs font-extrabold text-white shadow-md transition-all hover:bg-[#1F6B40] hover:shadow-lg active:scale-95 " + font}>
+        <ShoppingCart size={14} strokeWidth={2} />
+        {language === "ar" ? "\u0623\u0636\u0641 \u0644\u0644\u0633\u0644\u0629" : language === "fr" ? "Ajouter" : "Add to cart"}
+      </button>
+    );
+  }
+
+  return (
+    <div className="flex items-center justify-between rounded-xl border border-[#2E8B57]/30 bg-[#2E8B57]/8 p-1">
+      <button onClick={() => removeItem(product.name_ar, step)}
+        className="flex h-8 w-8 items-center justify-center rounded-lg text-[#2E8B57] transition-colors hover:bg-[#2E8B57]/15 active:scale-95">
+        <Minus size={14} strokeWidth={2.5} />
+      </button>
+      <span className={"text-sm font-extrabold text-[#2E8B57] font-latin"}>
+        {formatQuantity(qty, product.unit)}
+      </span>
+      <button onClick={() => addToCart(catalogProduct, step)}
+        className="flex h-8 w-8 items-center justify-center rounded-lg text-[#2E8B57] transition-colors hover:bg-[#2E8B57]/15 active:scale-95">
+        <Plus size={14} strokeWidth={2.5} />
+      </button>
+    </div>
+  );
+}
+
+// ── Premium product card ──────────────────────────────────────────────────────
+const CAT_META: Record<string, { emoji: string; bg: string; badge: string }> = {
+  Fruits:          { emoji: "\ud83c\udf4e", bg: "bg-orange-50",   badge: "bg-orange-100 text-orange-700" },
+  Vegetables:      { emoji: "\ud83e\udd55", bg: "bg-emerald-50",  badge: "bg-emerald-100 text-emerald-700" },
+  "White Meats":   { emoji: "\ud83c\udf57", bg: "bg-rose-50",     badge: "bg-rose-100 text-rose-700" },
+  "Whole Chicken": { emoji: "\ud83c\udf57", bg: "bg-rose-50",     badge: "bg-rose-100 text-rose-700" },
+  "Chicken Cuts":  { emoji: "\ud83e\udd69", bg: "bg-red-50",      badge: "bg-red-100 text-red-700" },
+  Eggs:            { emoji: "\ud83e\udd5a", bg: "bg-yellow-50",   badge: "bg-yellow-100 text-yellow-700" },
+  Other:           { emoji: "\ud83d\uded2", bg: "bg-gray-50",     badge: "bg-gray-100 text-gray-600" },
+};
+
+function ProductCard({ product }: { product: DBProduct }) {
+  const { language } = useLanguage();
+  const font  = language === "ar" ? "font-arabic" : "font-latin";
+  const dir   = language === "ar" ? "rtl" : "ltr";
+  const meta  = CAT_META[product.category] ?? CAT_META.Other;
+  const name  = product.name_ar || product.name_fr || "—";
+
+  return (
+    <div className={"group relative flex flex-col overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm transition-all duration-300 hover:border-[#2E8B57]/20 hover:shadow-xl hover:-translate-y-0.5 " + font}>
+
+      {/* Image area */}
+      <div className={"relative flex h-44 items-center justify-center overflow-hidden " + meta.bg}>
+        <span className="text-6xl transition-transform duration-300 group-hover:scale-110 select-none">
+          {meta.emoji}
+        </span>
+        {/* Stock badge */}
+        {product.in_stock ? (
+          <span className="absolute top-3 right-3 flex items-center gap-1 rounded-full bg-[#2E8B57]/10 px-2 py-0.5 text-[10px] font-bold text-[#2E8B57]">
+            <CheckCircle size={9} />
+            {language === "ar" ? "\u0645\u062a\u0648\u0641\u0631" : language === "fr" ? "Dispo" : "In stock"}
+          </span>
+        ) : (
+          <span className="absolute top-3 right-3 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-bold text-gray-400">
+            {language === "ar" ? "\u063a\u064a\u0631 \u0645\u062a\u0648\u0641\u0631" : language === "fr" ? "Épuisé" : "Out of stock"}
+          </span>
+        )}
+        {/* Category badge */}
+        <span className={"absolute bottom-3 left-3 rounded-full px-2.5 py-1 text-[10px] font-bold " + meta.badge}>
+          {product.category}
+        </span>
+      </div>
+
+      {/* Content */}
+      <div className="flex flex-1 flex-col gap-3 p-4">
+        <div dir={dir} className={language === "ar" ? "text-right" : "text-left"}>
+          <h3 dir="rtl" className="font-bold text-gray-800 font-arabic leading-snug line-clamp-2">{name}</h3>
+          {product.name_fr && product.name_fr !== product.name_ar && (
+            <p className="mt-0.5 text-xs text-gray-400 font-latin">{product.name_fr}</p>
+          )}
+        </div>
+
+        {/* Price row */}
+        <div className={"flex items-end justify-between " + (language === "ar" ? "flex-row-reverse" : "")}>
+          <div className={language === "ar" ? "text-right" : ""}>
+            <span className="text-2xl font-extrabold text-gray-900 font-latin leading-none">
+              {product.price_mad.toFixed(2)}
+            </span>
+            <span className="ml-1 text-xs font-semibold text-gray-400 font-latin">MAD</span>
+            <p className="mt-0.5 text-[11px] text-gray-400 font-latin">
+              / {product.unit || "kg"}
+            </p>
+          </div>
+          {/* Origin badge */}
+          <span className="flex items-center gap-1 rounded-full bg-green-50 px-2.5 py-1 text-[10px] font-bold text-green-700">
+            <Leaf size={8} />
+            {language === "ar" ? "\u0645\u063a\u0631\u0628\u064a" : language === "fr" ? "Maroc" : "Morocco"}
+          </span>
+        </div>
+
+        <QtyControl product={product} />
+      </div>
+    </div>
+  );
+}
+
+// ── Main page ─────────────────────────────────────────────────────────────────
+export default function HomePage() {
+  const { language, isRTL } = useLanguage();
+  const font = language === "ar" ? "font-arabic" : "font-latin";
+  const dir  = isRTL ? "rtl" : "ltr";
+
+  const [products,  setProducts]  = useState<DBProduct[]>([]);
+  const [loading,   setLoading]   = useState(true);
+  const [error,     setError]     = useState("");
+  const [activeKey, setActiveKey] = useState<NicheKey>("all");
+  const [search,    setSearch]    = useState("");
+  const [sortBy,    setSortBy]    = useState<"default" | "price_asc" | "price_desc">("default");
+
+  async function load() {
+    setLoading(true); setError("");
+    try {
+      const data = await getProducts();
+      setProducts(data);
+    } catch {
+      setError(language === "ar" ? "\u062a\u0639\u0630\u0651\u0631 \u062a\u062d\u0645\u064a\u0644 \u0627\u0644\u0645\u0646\u062a\u062c\u0627\u062a" : "Impossible de charger les produits.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { load(); }, []);
+
+  const filtered = useMemo(() => {
+    let list = [...products];
+
+    // Category filter
+    if (activeKey !== "all") {
+      const cat = CATEGORIES.find((c) => c.key === activeKey);
+      if (cat) {
+        list = list.filter((p) => cat.db_match.some((m) => p.category?.toLowerCase() === m.toLowerCase()));
+      }
+    }
+
+    // Search
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      list = list.filter((p) =>
+        (p.name_ar || "").toLowerCase().includes(q) ||
+        (p.name_fr || "").toLowerCase().includes(q) ||
+        (p.category || "").toLowerCase().includes(q)
+      );
+    }
+
+    // Sort
+    if (sortBy === "price_asc")  list.sort((a, b) => a.price_mad - b.price_mad);
+    if (sortBy === "price_desc") list.sort((a, b) => b.price_mad - a.price_mad);
+
+    return list;
+  }, [products, activeKey, search, sortBy]);
+
+  const inStockCount = filtered.filter((p) => p.in_stock).length;
+
+  const sortLabel = language === "ar"
+    ? { default: "\u0627\u0641\u062a\u0631\u0627\u0636\u064a", price_asc: "\u0633\u0639\u0631 \u062a\u0635\u0627\u0639\u062f\u064a", price_desc: "\u0633\u0639\u0631 \u062a\u0646\u0627\u0632\u0644\u064a" }
+    : language === "fr"
+    ? { default: "Par défaut", price_asc: "Prix croissant", price_desc: "Prix décroissant" }
+    : { default: "Default", price_asc: "Price: Low → High", price_desc: "Price: High → Low" };
+
+  return (
+    <div className={"min-h-screen " + font} style={{ background: "#FAF7F2" }}>
+
+      {/* ── Page header ── */}
+      <div className="relative overflow-hidden" style={{ background: "linear-gradient(135deg,#0d3b36 0%,#1a5c4a 60%,#2E8B57 100%)" }}>
+        <div className="absolute inset-0 zellige-bg-light opacity-15" />
+        <div className="mx-auto max-w-7xl px-4 py-8 md:py-10" dir={dir}>
+          <div className={language === "ar" ? "text-right" : "text-left"}>
+            <p className={"text-[10px] font-bold uppercase tracking-widest text-[#FF9800]/70 " + font}>GreenGo Market</p>
+            <h1 className={"mt-1 text-2xl font-extrabold text-white md:text-3xl " + font}>
+              {language === "ar" ? "\u0627\u0644\u0643\u062a\u0627\u0644\u0648\u062c" : language === "fr" ? "Catalogue Produits" : "Product Catalog"}
+            </h1>
+            <p className={"mt-1 text-sm text-white/50 " + font}>
+              {loading
+                ? (language === "ar" ? "\u062c\u0627\u0631\u064d \u0627\u0644\u062a\u062d\u0645\u064a\u0644\u2026" : "Chargement…")
+                : inStockCount + " " + (language === "ar" ? "\u0645\u0646\u062a\u062c \u0645\u062a\u0627\u062d" : language === "fr" ? "produits disponibles" : "products available")}
+            </p>
+          </div>
+        </div>
+        <div className="zellige-border" />
+      </div>
+
+      <div className="mx-auto max-w-7xl px-4 py-6 space-y-6">
+
+        {/* ── Category pills ── */}
+        <div className={"flex flex-nowrap gap-2.5 overflow-x-auto pb-1 scrollbar-hide " + (isRTL ? "flex-row-reverse" : "")}>
+          {CATEGORIES.map((cat) => {
+            const active = activeKey === cat.key;
+            return (
+              <button key={cat.key} onClick={() => setActiveKey(cat.key)}
+                className={"flex shrink-0 items-center gap-2 rounded-full border px-4 py-2.5 text-sm font-bold transition-all duration-200 " + (active
+                  ? "border-[#2E8B57] bg-[#2E8B57] text-white shadow-lg shadow-[#2E8B57]/25"
+                  : "border-gray-200 bg-white text-gray-600 hover:border-[#2E8B57]/40 hover:text-[#2E8B57] hover:shadow-sm") + " " + font}>
+                <span className="text-base">{cat.emoji}</span>
+                <span>{catLabel(cat, language)}</span>
+                {activeKey === cat.key && cat.key !== "all" && (
+                  <span className="flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-white/20 px-1 text-[10px] font-extrabold">
+                    {filtered.length}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* ── Search + sort bar ── */}
+        <div className={"flex flex-wrap items-center gap-3 " + (isRTL ? "flex-row-reverse" : "")}>
+          <div className="relative flex-1 min-w-48">
+            <Search size={14} className={"absolute top-1/2 -translate-y-1/2 text-gray-400 " + (isRTL ? "right-3" : "left-3")} />
+            <input
+              type="text" value={search} onChange={(e) => setSearch(e.target.value)}
+              dir={dir}
+              placeholder={language === "ar" ? "\u0627\u0628\u062d\u062b \u0639\u0646 \u0645\u0646\u062a\u062c\u2026" : language === "fr" ? "Rechercher…" : "Search products…"}
+              className={"w-full rounded-xl border border-gray-200 bg-white py-2.5 text-sm text-gray-700 placeholder-gray-400 outline-none transition-all focus:border-[#2E8B57] focus:ring-2 focus:ring-[#2E8B57]/15 " + (isRTL ? "pr-9 pl-4" : "pl-9 pr-4") + " " + font}
+            />
+          </div>
+          <div className={"flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2.5 " + (isRTL ? "flex-row-reverse" : "")}>
+            <SlidersHorizontal size={13} className="text-gray-400 shrink-0" />
+            <select value={sortBy} onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+              className={"text-sm text-gray-600 outline-none bg-transparent " + font}>
+              <option value="default">{sortLabel.default}</option>
+              <option value="price_asc">{sortLabel.price_asc}</option>
+              <option value="price_desc">{sortLabel.price_desc}</option>
+            </select>
+          </div>
+          <button onClick={load} disabled={loading}
+            className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm font-semibold text-gray-500 transition-colors hover:border-[#2E8B57]/40 hover:text-[#2E8B57] disabled:opacity-40">
+            {loading ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+          </button>
+        </div>
+
+        {/* ── Loading ── */}
+        {loading && (
+          <div className="flex flex-col items-center gap-4 py-20">
+            <Loader2 size={32} className="animate-spin text-[#2E8B57]" />
+            <p className={"text-sm text-gray-500 " + font}>
+              {language === "ar" ? "\u062c\u0627\u0631\u064d \u062a\u062d\u0645\u064a\u0644 \u0627\u0644\u0645\u0646\u062a\u062c\u0627\u062a\u2026" : language === "fr" ? "Chargement des produits frais…" : "Loading fresh products…"}
+            </p>
+          </div>
+        )}
+
+        {/* ── Error ── */}
+        {!loading && error && (
+          <div className="flex flex-col items-center gap-4 py-20 text-center">
+            <AlertCircle size={32} className="text-red-400" />
+            <p className={"text-gray-600 " + font}>{error}</p>
+            <button onClick={load}
+              className={"flex items-center gap-2 rounded-xl bg-[#2E8B57] px-5 py-2 text-sm font-bold text-white " + font}>
+              <RefreshCw size={13} />
+              {language === "ar" ? "\u0625\u0639\u0627\u062f\u0629 \u0627\u0644\u0645\u062d\u0627\u0648\u0644\u0629" : language === "fr" ? "Réessayer" : "Retry"}
+            </button>
+          </div>
+        )}
+
+        {/* ── Empty state ── */}
+        {!loading && !error && filtered.length === 0 && (
+          <div className={"flex flex-col items-center gap-3 py-20 text-center " + font}>
+            <span className="text-5xl">🔍</span>
+            <p className="font-bold text-gray-700">
+              {language === "ar" ? "\u0644\u0627 \u062a\u0648\u062c\u062f \u0645\u0646\u062a\u062c\u0627\u062a \u0641\u064a \u0647\u0630\u0627 \u0627\u0644\u062a\u0635\u0646\u064a\u0641" : language === "fr" ? "Aucun produit dans cette catégorie" : "No products in this category"}
+            </p>
+            <button onClick={() => { setActiveKey("all"); setSearch(""); }}
+              className={"text-sm font-semibold text-[#2E8B57] hover:underline " + font}>
+              {language === "ar" ? "\u0639\u0631\u0636 \u0627\u0644\u0643\u0644" : "Voir tout"}
+            </button>
+          </div>
+        )}
+
+        {/* ── Product grid ── */}
+        {!loading && !error && filtered.length > 0 && (
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+            {filtered.map((product) => (
+              <ProductCard key={product.id} product={product} />
+            ))}
+          </div>
+        )}
+
+        {/* ── Trust strip ── */}
+        {!loading && !error && (
+          <div className="grid grid-cols-2 gap-3 border-t border-gray-100 pt-6 sm:grid-cols-4">
+            {[
+              { emoji: "\ud83d\udef5", label_fr: "Livraison rapide",     label_ar: "\u062a\u0648\u0635\u064a\u0644 \u0633\u0631\u064a\u0639",          label_en: "Fast delivery" },
+              { emoji: "\ud83c\udf3f", label_fr: "Produits frais",       label_ar: "\u0645\u0646\u062a\u062c\u0627\u062a \u0637\u0627\u0632\u062c\u0629",  label_en: "Fresh products" },
+              { emoji: "\ud83d\udcde", label_fr: "Support WhatsApp",     label_ar: "\u062f\u0639\u0645 \u0648\u0627\u062a\u0633\u0627\u0628",             label_en: "WhatsApp support" },
+              { emoji: "\ud83d\udd12", label_fr: "Paiement sécurisé",    label_ar: "\u062f\u0641\u0639 \u0622\u0645\u0646",                              label_en: "Secure payment" },
+            ].map((item) => (
+              <div key={item.label_en} className={"flex items-center gap-2.5 rounded-xl bg-white p-3 shadow-sm " + (isRTL ? "flex-row-reverse" : "")}>
+                <span className="text-xl">{item.emoji}</span>
+                <span className={"text-xs font-semibold text-gray-600 " + font}>
+                  {language === "ar" ? item.label_ar : language === "fr" ? item.label_fr : item.label_en}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
+      </div>
+    </div>
+  );
+}
+

@@ -12,28 +12,18 @@
         tailwind.config = {
             theme: {
                 extend: {
-                    colors: {
-                        greengo: {
-                            green: '#2E8B57',
-                            orange: '#FF9800',
-                        }
-                    },
+                    colors: { greengo: { green: '#2E8B57', orange: '#FF9800' } },
                     fontFamily: {
-                        'arabic': ['Tajawal', 'Cairo', 'sans-serif'],
-                        'latin': ['Poppins', 'Montserrat', 'sans-serif']
+                        arabic: ['Tajawal', 'Cairo', 'sans-serif'],
+                        latin:  ['Poppins', 'Montserrat', 'sans-serif']
                     }
                 }
             }
         }
     </script>
     <style>
-        * {
-            font-family: 'Poppins', 'Montserrat', sans-serif;
-        }
-        
-        [lang="ar"] *, [lang="ar"] body {
-            font-family: 'Tajawal', 'Cairo', sans-serif;
-        }
+        * { font-family: 'Poppins', 'Montserrat', sans-serif; }
+        [lang="ar"] *, [lang="ar"] body { font-family: 'Tajawal', 'Cairo', sans-serif; }
 
         body {
             background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 25%, #fff7ed 50%, #ffedd5 75%, #fef3c7 100%);
@@ -41,811 +31,570 @@
         }
 
         .glass-container {
-            background: rgba(255, 255, 255, 0.75);
+            background: rgba(255,255,255,0.75);
             backdrop-filter: blur(20px);
             -webkit-backdrop-filter: blur(20px);
-            border: 1px solid rgba(46, 139, 87, 0.1);
-            box-shadow: 0 8px 32px 0 rgba(46, 139, 87, 0.15);
+            border: 1px solid rgba(46,139,87,0.1);
+            box-shadow: 0 8px 32px 0 rgba(46,139,87,0.15);
         }
 
         .glass-card {
-            background: rgba(255, 255, 255, 0.85);
+            background: rgba(255,255,255,0.85);
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
-            border: 1px solid rgba(46, 139, 87, 0.08);
-            box-shadow: 0 4px 16px 0 rgba(46, 139, 87, 0.1);
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            border: 1px solid rgba(46,139,87,0.08);
+            box-shadow: 0 4px 16px 0 rgba(46,139,87,0.1);
+            transition: all 0.3s cubic-bezier(0.4,0,0.2,1);
         }
-
-        .glass-card:hover {
-            transform: translateY(-6px) scale(1.02);
-            box-shadow: 0 12px 32px 0 rgba(46, 139, 87, 0.2);
-        }
+        .glass-card:hover { transform: translateY(-6px) scale(1.02); box-shadow: 0 12px 32px 0 rgba(46,139,87,0.2); }
 
         .status-badge {
-            padding: 0.5rem 1.125rem;
-            border-radius: 50px;
-            font-size: 0.8125rem;
-            font-weight: 700;
-            letter-spacing: 0.5px;
-            text-transform: uppercase;
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
-            transition: all 0.2s ease;
+            padding: 0.5rem 1.125rem; border-radius: 50px;
+            font-size: 0.8125rem; font-weight: 700;
+            letter-spacing: 0.5px; text-transform: uppercase;
+            display: inline-flex; align-items: center; gap: 0.5rem;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.1); transition: all 0.2s ease;
         }
+        .status-badge:hover { transform: scale(1.05); }
 
-        .status-badge:hover {
-            transform: scale(1.05);
-        }
-
-        .status-pending {
-            background: linear-gradient(135deg, #FF9800 0%, #FFB74D 100%);
-            color: #FFFFFF;
-            border: 2px solid #F57C00;
-        }
-
-        .status-confirmed {
-            background: linear-gradient(135deg, #2E8B57 0%, #3FAA6F 100%);
-            color: #FFFFFF;
-            border: 2px solid #236B44;
-        }
-
-        .status-delivering {
-            background: linear-gradient(135deg, #1976D2 0%, #42A5F5 100%);
-            color: #FFFFFF;
-            border: 2px solid #1565C0;
-        }
-
-        .status-delivered {
-            background: linear-gradient(135deg, #7B1FA2 0%, #AB47BC 100%);
-            color: #FFFFFF;
-            border: 2px solid #6A1B9A;
-        }
-
-        .status-cancelled {
-            background: linear-gradient(135deg, #D32F2F 0%, #EF5350 100%);
-            color: #FFFFFF;
-            border: 2px solid #C62828;
-        }
-
-        .status-completed {
-            background: linear-gradient(135deg, #2E8B57 0%, #66BB6A 100%);
-            color: #FFFFFF;
-            border: 2px solid #2E7D32;
-        }
+        .status-pending    { background: linear-gradient(135deg,#FF9800,#FFB74D); color:#fff; border:2px solid #F57C00; }
+        .status-preparing  { background: linear-gradient(135deg,#1976D2,#42A5F5); color:#fff; border:2px solid #1565C0; }
+        .status-out_for_delivery { background: linear-gradient(135deg,#7B1FA2,#AB47BC); color:#fff; border:2px solid #6A1B9A; }
+        .status-confirmed  { background: linear-gradient(135deg,#2E8B57,#3FAA6F); color:#fff; border:2px solid #236B44; }
+        .status-delivering { background: linear-gradient(135deg,#1976D2,#42A5F5); color:#fff; border:2px solid #1565C0; }
+        .status-delivered  { background: linear-gradient(135deg,#7B1FA2,#AB47BC); color:#fff; border:2px solid #6A1B9A; }
+        .status-cancelled  { background: linear-gradient(135deg,#D32F2F,#EF5350); color:#fff; border:2px solid #C62828; }
+        .status-completed  { background: linear-gradient(135deg,#2E8B57,#66BB6A); color:#fff; border:2px solid #2E7D32; }
 
         .action-btn {
-            padding: 0.625rem 1.25rem;
-            border-radius: 12px;
-            font-size: 0.8125rem;
-            font-weight: 700;
-            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
-            border: 2px solid transparent;
-            cursor: pointer;
+            padding: 0.625rem 1.25rem; border-radius: 12px; font-size: 0.8125rem;
+            font-weight: 700; transition: all 0.25s cubic-bezier(0.4,0,0.2,1);
+            display: inline-flex; align-items: center; gap: 0.5rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+            border: 2px solid transparent; cursor: pointer;
         }
+        .action-btn:hover:not(:disabled)  { transform: translateY(-3px); box-shadow: 0 6px 20px rgba(0,0,0,0.2); }
+        .action-btn:active:not(:disabled) { transform: translateY(-1px); }
+        .action-btn:disabled { opacity:0.5; cursor:not-allowed; transform:none!important; box-shadow:none!important; }
 
-        .action-btn:hover:not(:disabled) {
-            transform: translateY(-3px);
-            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
-        }
+        .btn-preparing   { background: linear-gradient(135deg,#1976D2,#42A5F5); color:#fff; border-color:#1565C0; }
+        .btn-preparing:hover:not(:disabled) { background: linear-gradient(135deg,#1565C0,#1976D2); box-shadow: 0 6px 20px rgba(25,118,210,0.4); }
 
-        .action-btn:active:not(:disabled) {
-            transform: translateY(-1px);
-        }
+        .btn-delivery    { background: linear-gradient(135deg,#7B1FA2,#AB47BC); color:#fff; border-color:#6A1B9A; }
+        .btn-delivery:hover:not(:disabled) { background: linear-gradient(135deg,#6A1B9A,#7B1FA2); box-shadow: 0 6px 20px rgba(123,31,162,0.4); }
 
-        /* Disabled state while PATCH is in-flight */
-        .action-btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-            transform: none !important;
-            box-shadow: none !important;
-        }
+        .btn-complete    { background: linear-gradient(135deg,#2E8B57,#3FAA6F); color:#fff; border-color:#236B44; }
+        .btn-complete:hover:not(:disabled) { background: linear-gradient(135deg,#236B44,#2E8B57); box-shadow: 0 6px 20px rgba(46,139,87,0.4); }
 
-        .btn-complete {
-            background: linear-gradient(135deg, #2E8B57 0%, #3FAA6F 100%);
-            color: white;
-            border-color: #236B44;
-        }
+        .btn-cancel      { background: linear-gradient(135deg,#757575,#9E9E9E); color:#fff; border-color:#616161; }
+        .btn-cancel:hover:not(:disabled)  { background: linear-gradient(135deg,#D32F2F,#EF5350); border-color:#C62828; box-shadow: 0 6px 20px rgba(211,47,47,0.4); }
 
-        .btn-complete:hover:not(:disabled) {
-            background: linear-gradient(135deg, #236B44 0%, #2E8B57 100%);
-            box-shadow: 0 6px 20px rgba(46, 139, 87, 0.4);
-        }
+        table tbody tr { transition: all 0.2s ease; background: rgba(255,255,255,0.5); }
+        table tbody tr:hover { background: rgba(46,139,87,0.05); }
 
-        .btn-cancel {
-            background: linear-gradient(135deg, #757575 0%, #9E9E9E 100%);
-            color: white;
-            border-color: #616161;
-        }
-
-        .btn-cancel:hover:not(:disabled) {
-            background: linear-gradient(135deg, #D32F2F 0%, #EF5350 100%);
-            border-color: #C62828;
-            box-shadow: 0 6px 20px rgba(211, 47, 47, 0.4);
-        }
-
-        table tbody tr {
-            transition: all 0.2s ease;
-            background: rgba(255, 255, 255, 0.5);
-        }
-
-        table tbody tr:hover {
-            background: rgba(46, 139, 87, 0.05);
-            transform: scale(1.005);
-            box-shadow: 0 4px 12px rgba(46, 139, 87, 0.1);
-        }
-
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-
-        .spinning {
-            animation: spin 1s linear infinite;
-        }
-
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .spinning { animation: spin 1s linear infinite; }
         .loader-spinner {
-            width: 2rem;
-            height: 2rem;
-            border: 4px solid rgba(46, 139, 87, 0.2);
-            border-top-color: #2E8B57;
-            border-radius: 50%;
+            width:2rem; height:2rem;
+            border:4px solid rgba(46,139,87,0.2);
+            border-top-color:#2E8B57; border-radius:50%;
             animation: spin 1s linear infinite;
         }
 
-        .brand-gradient {
-            background: linear-gradient(135deg, #2E8B57 0%, #3FAA6F 50%, #FF9800 100%);
-        }
+        .brand-gradient         { background: linear-gradient(135deg,#2E8B57 0%,#3FAA6F 50%,#FF9800 100%); }
+        .brand-gradient-reverse { background: linear-gradient(135deg,#FF9800 0%,#FFB74D 50%,#2E8B57 100%); }
 
-        .brand-gradient-reverse {
-            background: linear-gradient(135deg, #FF9800 0%, #FFB74D 50%, #2E8B57 100%);
-        }
-
-        /* ── Toast notification ──────────────────────────────────────────── */
+        /* Toast */
         #toast {
-            position: fixed;
-            bottom: 2rem;
-            right: 2rem;
-            z-index: 9999;
-            min-width: 280px;
-            max-width: 420px;
-            padding: 1rem 1.5rem;
-            border-radius: 16px;
-            font-weight: 700;
-            font-size: 0.9375rem;
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
-            pointer-events: none;
-            opacity: 0;
-            transform: translateY(1.5rem) scale(0.95);
-            transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+            position:fixed; bottom:2rem; right:2rem; z-index:9999;
+            min-width:280px; max-width:420px;
+            padding:1rem 1.5rem; border-radius:16px;
+            font-weight:700; font-size:0.9375rem;
+            display:flex; align-items:center; gap:0.75rem;
+            box-shadow:0 8px 32px rgba(0,0,0,0.18);
+            pointer-events:none; opacity:0;
+            transform:translateY(1.5rem) scale(0.95);
+            transition:opacity 0.3s ease, transform 0.3s cubic-bezier(0.34,1.56,0.64,1);
         }
+        #toast.toast-show    { opacity:1; transform:translateY(0) scale(1); }
+        #toast.toast-success { background:linear-gradient(135deg,#2E8B57,#3FAA6F); color:#fff; border:2px solid #236B44; }
+        #toast.toast-error   { background:linear-gradient(135deg,#D32F2F,#EF5350); color:#fff; border:2px solid #C62828; }
+        #toast.toast-info    { background:linear-gradient(135deg,#1976D2,#42A5F5); color:#fff; border:2px solid #1565C0; }
 
-        #toast.toast-show {
-            opacity: 1;
-            transform: translateY(0) scale(1);
-        }
-
-        #toast.toast-success {
-            background: linear-gradient(135deg, #2E8B57 0%, #3FAA6F 100%);
-            color: #fff;
-            border: 2px solid #236B44;
-        }
-
-        #toast.toast-error {
-            background: linear-gradient(135deg, #D32F2F 0%, #EF5350 100%);
-            color: #fff;
-            border: 2px solid #C62828;
-        }
-
-        /* RTL Support for Arabic */
-        [dir="rtl"] table {
-            direction: rtl;
-        }
-
-        [dir="rtl"] #toast {
-            right: auto;
-            left: 2rem;
-        }
-
-        [dir="rtl"] .flex {
-            flex-direction: row-reverse;
-        }
+        [dir="rtl"] #toast { right:auto; left:2rem; }
     </style>
 </head>
 <body>
 
-    <!-- ── Toast ─────────────────────────────────────────────────────────── -->
-    <div id="toast" role="status" aria-live="polite"></div>
+<div id="toast" role="status" aria-live="polite"></div>
 
-    <div class="container mx-auto px-6 py-10 max-w-[1800px]">
-        <!-- Header -->
-        <div class="glass-container rounded-3xl p-8 mb-10">
-            <div class="flex flex-col lg:flex-row justify-between items-center gap-6">
-                <div class="flex items-center gap-6">
-                    <div class="w-24 h-24 brand-gradient rounded-3xl flex items-center justify-center shadow-2xl transform hover:scale-110 hover:rotate-3 transition-all duration-300">
-                        <svg class="w-14 h-14 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path>
-                        </svg>
-                    </div>
-                    <div>
-                        <h1 class="text-5xl font-black bg-gradient-to-r from-[#2E8B57] via-[#3FAA6F] to-[#FF9800] bg-clip-text text-transparent" id="dashboardTitle">
-                            GreenGo Market Admin
-                        </h1>
-                        <p class="text-gray-600 font-semibold text-lg mt-2" id="dashboardSubtitle">
-                            Order Management Dashboard
-                        </p>
-                    </div>
-                </div>
-                <div class="flex gap-4 flex-wrap justify-center items-center">
-                    <button onclick="setLanguage('en')" class="px-6 py-3 rounded-2xl bg-white hover:bg-[#2E8B57] hover:text-white transition-all duration-300 font-bold text-base shadow-lg border-2 border-gray-200 hover:border-[#2E8B57] hover:scale-105">
-                        EN
-                    </button>
-                    <button onclick="setLanguage('fr')" class="px-6 py-3 rounded-2xl bg-white hover:bg-[#2E8B57] hover:text-white transition-all duration-300 font-bold text-base shadow-lg border-2 border-gray-200 hover:border-[#2E8B57] hover:scale-105">
-                        FR
-                    </button>
-                    <button onclick="setLanguage('ar')" class="px-6 py-3 rounded-2xl bg-white hover:bg-[#2E8B57] hover:text-white transition-all duration-300 font-bold text-base shadow-lg border-2 border-gray-200 hover:border-[#2E8B57] hover:scale-105">
-                        عربي
-                    </button>
-                    <button onclick="fetchOrders()" id="refreshButton" class="px-8 py-3 rounded-2xl brand-gradient-reverse hover:shadow-2xl text-white font-black text-base transition-all duration-300 flex items-center gap-3 hover:scale-105 border-2 border-[#FF9800]">
-                        <svg class="w-6 h-6" id="refreshIcon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-                        </svg>
-                        <span id="refreshBtn">Refresh</span>
-                    </button>
-                </div>
-            </div>
-        </div>
+<div class="container mx-auto px-6 py-10 max-w-[1800px]">
 
-        <!-- Stats Cards -->
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-10">
-            <div class="glass-card rounded-2xl p-7 cursor-pointer">
-                <div class="flex items-center justify-between mb-4">
-                    <div class="text-[#2E8B57] text-xs font-black uppercase tracking-widest" id="totalOrdersLabel">Total Orders</div>
-                    <div class="w-12 h-12 bg-gradient-to-br from-[#2E8B57] to-[#3FAA6F] rounded-2xl flex items-center justify-center shadow-lg">
-                        <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
-                        </svg>
-                    </div>
-                </div>
-                <div class="text-6xl font-black text-[#2E8B57]" id="totalOrders">0</div>
-            </div>
-
-            <div class="glass-card rounded-2xl p-7 cursor-pointer">
-                <div class="flex items-center justify-between mb-4">
-                    <div class="text-[#FF9800] text-xs font-black uppercase tracking-widest" id="pendingLabel">Pending</div>
-                    <div class="w-12 h-12 bg-gradient-to-br from-[#FF9800] to-[#FFB74D] rounded-2xl flex items-center justify-center shadow-lg">
-                        <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                        </svg>
-                    </div>
-                </div>
-                <div class="text-6xl font-black text-[#FF9800]" id="pendingCount">0</div>
-            </div>
-
-            <div class="glass-card rounded-2xl p-7 cursor-pointer">
-                <div class="flex items-center justify-between mb-4">
-                    <div class="text-green-700 text-xs font-black uppercase tracking-widest" id="confirmedLabel">Confirmed</div>
-                    <div class="w-12 h-12 bg-gradient-to-br from-green-600 to-green-400 rounded-2xl flex items-center justify-center shadow-lg">
-                        <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                        </svg>
-                    </div>
-                </div>
-                <div class="text-6xl font-black text-green-700" id="confirmedCount">0</div>
-            </div>
-
-            <div class="glass-card rounded-2xl p-7 cursor-pointer">
-                <div class="flex items-center justify-between mb-4">
-                    <div class="text-blue-700 text-xs font-black uppercase tracking-widest" id="deliveringLabel">Delivering</div>
-                    <div class="w-12 h-12 bg-gradient-to-br from-blue-600 to-blue-400 rounded-2xl flex items-center justify-center shadow-lg">
-                        <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
-                        </svg>
-                    </div>
-                </div>
-                <div class="text-6xl font-black text-blue-700" id="deliveringCount">0</div>
-            </div>
-
-            <div class="glass-card rounded-2xl p-7 cursor-pointer">
-                <div class="flex items-center justify-between mb-4">
-                    <div class="text-purple-700 text-xs font-black uppercase tracking-widest" id="deliveredLabel">Delivered</div>
-                    <div class="w-12 h-12 bg-gradient-to-br from-purple-600 to-purple-400 rounded-2xl flex items-center justify-center shadow-lg">
-                        <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path>
-                        </svg>
-                    </div>
-                </div>
-                <div class="text-6xl font-black text-purple-700" id="deliveredCount">0</div>
-            </div>
-        </div>
-
-        <!-- Orders Table -->
-        <div class="glass-container rounded-3xl overflow-hidden shadow-2xl">
-            <div class="p-8 brand-gradient">
-                <h2 class="text-4xl font-black text-white flex items-center gap-4" id="ordersTableTitle">
-                    <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+    <!-- Header -->
+    <div class="glass-container rounded-3xl p-8 mb-10">
+        <div class="flex flex-col lg:flex-row justify-between items-center gap-6">
+            <div class="flex items-center gap-6">
+                <div class="w-24 h-24 brand-gradient rounded-3xl flex items-center justify-center shadow-2xl transform hover:scale-110 hover:rotate-3 transition-all duration-300">
+                    <svg class="w-14 h-14 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/>
                     </svg>
-                    Recent Orders
-                </h2>
+                </div>
+                <div>
+                    <h1 class="text-5xl font-black bg-gradient-to-r from-[#2E8B57] via-[#3FAA6F] to-[#FF9800] bg-clip-text text-transparent" id="dashboardTitle">
+                        GreenGo Market Admin
+                    </h1>
+                    <p class="text-gray-600 font-semibold text-lg mt-2" id="dashboardSubtitle">
+                        Order Management Dashboard
+                    </p>
+                </div>
             </div>
-            <div class="overflow-x-auto">
-                <table class="w-full">
-                    <thead class="bg-gradient-to-r from-gray-100 via-green-50 to-orange-50">
-                        <tr>
-                            <th class="px-6 py-6 text-left text-xs font-black text-[#2E8B57] uppercase tracking-widest border-b-2 border-[#2E8B57]" id="orderIdHeader">Order ID</th>
-                            <th class="px-6 py-6 text-left text-xs font-black text-[#2E8B57] uppercase tracking-widest border-b-2 border-[#2E8B57]" id="customerHeader">Customer</th>
-                            <th class="px-6 py-6 text-left text-xs font-black text-[#2E8B57] uppercase tracking-widest border-b-2 border-[#2E8B57]" id="phoneHeader">Phone</th>
-                            <th class="px-6 py-6 text-left text-xs font-black text-[#2E8B57] uppercase tracking-widest border-b-2 border-[#2E8B57]" id="addressHeader">Address</th>
-                            <th class="px-6 py-6 text-left text-xs font-black text-[#2E8B57] uppercase tracking-widest border-b-2 border-[#2E8B57]" id="itemsHeader">Items</th>
-                            <th class="px-6 py-6 text-left text-xs font-black text-[#2E8B57] uppercase tracking-widest border-b-2 border-[#2E8B57]" id="totalHeader">Total</th>
-                            <th class="px-6 py-6 text-left text-xs font-black text-[#2E8B57] uppercase tracking-widest border-b-2 border-[#2E8B57]" id="statusHeader">Status</th>
-                            <th class="px-6 py-6 text-left text-xs font-black text-[#2E8B57] uppercase tracking-widest border-b-2 border-[#2E8B57]" id="dateHeader">Date</th>
-                            <th class="px-6 py-6 text-left text-xs font-black text-[#2E8B57] uppercase tracking-widest border-b-2 border-[#2E8B57]" id="actionsHeader">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody id="ordersTableBody" class="divide-y divide-gray-200">
-                        <tr>
-                            <td colspan="9" class="px-6 py-20 text-center">
-                                <div class="flex flex-col items-center justify-center gap-4">
-                                    <div class="loader-spinner"></div>
-                                    <span class="text-gray-600 text-xl font-bold" id="loadingMessage">Loading orders...</span>
-                                </div>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
+            <div class="flex gap-4 flex-wrap justify-center items-center">
+                <button onclick="setLanguage('en')" class="px-6 py-3 rounded-2xl bg-white hover:bg-[#2E8B57] hover:text-white transition-all duration-300 font-bold text-base shadow-lg border-2 border-gray-200 hover:border-[#2E8B57] hover:scale-105">EN</button>
+                <button onclick="setLanguage('fr')" class="px-6 py-3 rounded-2xl bg-white hover:bg-[#2E8B57] hover:text-white transition-all duration-300 font-bold text-base shadow-lg border-2 border-gray-200 hover:border-[#2E8B57] hover:scale-105">FR</button>
+                <button onclick="setLanguage('ar')" class="px-6 py-3 rounded-2xl bg-white hover:bg-[#2E8B57] hover:text-white transition-all duration-300 font-bold text-base shadow-lg border-2 border-gray-200 hover:border-[#2E8B57] hover:scale-105">عربي</button>
+                <button onclick="fetchOrders()" class="px-8 py-3 rounded-2xl brand-gradient-reverse text-white font-black text-base transition-all duration-300 flex items-center gap-3 hover:scale-105 border-2 border-[#FF9800]">
+                    <svg class="w-6 h-6" id="refreshIcon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                    </svg>
+                    <span id="refreshBtn">Refresh</span>
+                </button>
             </div>
         </div>
     </div>
 
-    <script>
-        // ── i18n ──────────────────────────────────────────────────────────────
-        const i18n = {
-            en: {
-                dashboardTitle: "GreenGo Market Admin",
-                dashboardSubtitle: "Order Management Dashboard",
-                refreshBtn: "Refresh",
-                totalOrdersLabel: "Total Orders",
-                pendingLabel: "Pending",
-                confirmedLabel: "Confirmed",
-                deliveringLabel: "Delivering",
-                deliveredLabel: "Delivered",
-                ordersTableTitle: "Recent Orders",
-                orderIdHeader: "Order ID",
-                customerHeader: "Customer",
-                phoneHeader: "Phone",
-                addressHeader: "Address",
-                itemsHeader: "Items",
-                totalHeader: "Total",
-                statusHeader: "Status",
-                dateHeader: "Date",
-                actionsHeader: "Actions",
-                loadingMessage: "Loading orders...",
-                noOrders: "No orders found",
-                errorFetching: "Error fetching orders. Please try again.",
-                statusPending: "Pending",
-                statusConfirmed: "Confirmed",
-                statusDelivering: "Delivering",
-                statusDelivered: "Delivered",
-                statusCancelled: "Cancelled",
-                statusCompleted: "Completed",
-                btnComplete: "✓ Complete",
-                btnCancel: "✕ Cancel",
-                toastCompleted: "✅ Order marked as completed!",
-                toastCancelled: "❌ Order cancelled.",
-                toastError: "⚠️ Failed to update order. Please try again.",
-                updating: "Updating…"
-            },
-            fr: {
-                dashboardTitle: "GreenGo Market Admin",
-                dashboardSubtitle: "Tableau de bord de gestion des commandes",
-                refreshBtn: "Actualiser",
-                totalOrdersLabel: "Total Commandes",
-                pendingLabel: "En attente",
-                confirmedLabel: "Confirmé",
-                deliveringLabel: "En livraison",
-                deliveredLabel: "Livré",
-                ordersTableTitle: "Commandes Récentes",
-                orderIdHeader: "ID Commande",
-                customerHeader: "Client",
-                phoneHeader: "Téléphone",
-                addressHeader: "Adresse",
-                itemsHeader: "Articles",
-                totalHeader: "Total",
-                statusHeader: "Statut",
-                dateHeader: "Date",
-                actionsHeader: "Actions",
-                loadingMessage: "Chargement des commandes...",
-                noOrders: "Aucune commande trouvée",
-                errorFetching: "Erreur lors de la récupération des commandes. Veuillez réessayer.",
-                statusPending: "En attente",
-                statusConfirmed: "Confirmé",
-                statusDelivering: "En livraison",
-                statusDelivered: "Livré",
-                statusCancelled: "Annulé",
-                statusCompleted: "Complété",
-                btnComplete: "✓ Compléter",
-                btnCancel: "✕ Annuler",
-                toastCompleted: "✅ Commande marquée comme complétée !",
-                toastCancelled: "❌ Commande annulée.",
-                toastError: "⚠️ Échec de la mise à jour. Veuillez réessayer.",
-                updating: "Mise à jour…"
-            },
-            ar: {
-                dashboardTitle: "إدارة سوق GreenGo",
-                dashboardSubtitle: "لوحة تحكم إدارة الطلبات",
-                refreshBtn: "تحديث",
-                totalOrdersLabel: "إجمالي الطلبات",
-                pendingLabel: "قيد الانتظار",
-                confirmedLabel: "مؤكد",
-                deliveringLabel: "قيد التوصيل",
-                deliveredLabel: "تم التوصيل",
-                ordersTableTitle: "الطلبات الأخيرة",
-                orderIdHeader: "رقم الطلب",
-                customerHeader: "العميل",
-                phoneHeader: "الهاتف",
-                addressHeader: "العنوان",
-                itemsHeader: "المنتجات",
-                totalHeader: "المجموع",
-                statusHeader: "الحالة",
-                dateHeader: "التاريخ",
-                actionsHeader: "الإجراءات",
-                loadingMessage: "جاري تحميل الطلبات...",
-                noOrders: "لا توجد طلبات",
-                errorFetching: "خطأ في تحميل الطلبات. يرجى المحاولة مرة أخرى.",
-                statusPending: "قيد الانتظار",
-                statusConfirmed: "مؤكد",
-                statusDelivering: "قيد التوصيل",
-                statusDelivered: "تم التوصيل",
-                statusCancelled: "ملغى",
-                statusCompleted: "مكتمل",
-                btnComplete: "✓ إكمال",
-                btnCancel: "✕ إلغاء",
-                toastCompleted: "✅ تم تحديد الطلب كمكتمل!",
-                toastCancelled: "❌ تم إلغاء الطلب.",
-                toastError: "⚠️ فشل تحديث الطلب. يرجى المحاولة مرة أخرى.",
-                updating: "جاري التحديث…"
-            }
-        };
+    <!-- Stats -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-10">
+        <div class="glass-card rounded-2xl p-7">
+            <div class="flex items-center justify-between mb-4">
+                <div class="text-[#2E8B57] text-xs font-black uppercase tracking-widest" id="totalOrdersLabel">Total Orders</div>
+                <div class="w-12 h-12 bg-gradient-to-br from-[#2E8B57] to-[#3FAA6F] rounded-2xl flex items-center justify-center shadow-lg">
+                    <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+                </div>
+            </div>
+            <div class="text-6xl font-black text-[#2E8B57]" id="totalOrders">0</div>
+        </div>
+        <div class="glass-card rounded-2xl p-7">
+            <div class="flex items-center justify-between mb-4">
+                <div class="text-[#FF9800] text-xs font-black uppercase tracking-widest" id="pendingLabel">Pending</div>
+                <div class="w-12 h-12 bg-gradient-to-br from-[#FF9800] to-[#FFB74D] rounded-2xl flex items-center justify-center shadow-lg">
+                    <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                </div>
+            </div>
+            <div class="text-6xl font-black text-[#FF9800]" id="pendingCount">0</div>
+        </div>
+        <div class="glass-card rounded-2xl p-7">
+            <div class="flex items-center justify-between mb-4">
+                <div class="text-blue-700 text-xs font-black uppercase tracking-widest" id="preparingLabel">Preparing</div>
+                <div class="w-12 h-12 bg-gradient-to-br from-blue-600 to-blue-400 rounded-2xl flex items-center justify-center shadow-lg">
+                    <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                </div>
+            </div>
+            <div class="text-6xl font-black text-blue-700" id="preparingCount">0</div>
+        </div>
+        <div class="glass-card rounded-2xl p-7">
+            <div class="flex items-center justify-between mb-4">
+                <div class="text-purple-700 text-xs font-black uppercase tracking-widest" id="deliveringLabel">Out for Delivery</div>
+                <div class="w-12 h-12 bg-gradient-to-br from-purple-600 to-purple-400 rounded-2xl flex items-center justify-center shadow-lg">
+                    <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+                </div>
+            </div>
+            <div class="text-6xl font-black text-purple-700" id="deliveringCount">0</div>
+        </div>
+        <div class="glass-card rounded-2xl p-7">
+            <div class="flex items-center justify-between mb-4">
+                <div class="text-green-700 text-xs font-black uppercase tracking-widest" id="completedLabel">Completed</div>
+                <div class="w-12 h-12 bg-gradient-to-br from-green-600 to-green-400 rounded-2xl flex items-center justify-center shadow-lg">
+                    <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                </div>
+            </div>
+            <div class="text-6xl font-black text-green-700" id="completedCount">0</div>
+        </div>
+    </div>
 
-        let currentLang = 'en';
-
-        // ── Toast ─────────────────────────────────────────────────────────────
-        let _toastTimer = null;
-
-        function showToast(message, type = 'success') {
-            const toast = document.getElementById('toast');
-            // Clear any running auto-hide
-            if (_toastTimer) clearTimeout(_toastTimer);
-
-            toast.textContent = message;
-            toast.className   = `toast-${type} toast-show`;
-
-            _toastTimer = setTimeout(() => {
-                toast.classList.remove('toast-show');
-            }, 3500);
-        }
-
-        // ── Language ──────────────────────────────────────────────────────────
-        function setLanguage(lang) {
-            currentLang = lang;
-            document.documentElement.setAttribute('lang', lang);
-            document.documentElement.setAttribute('dir', lang === 'ar' ? 'rtl' : 'ltr');
-
-            Object.keys(i18n[lang]).forEach(key => {
-                const el = document.getElementById(key);
-                if (el) el.textContent = i18n[lang][key];
-            });
-
-            fetchOrders();
-        }
-
-        // ── updateOrderStatus — the live PATCH call ───────────────────────────
-        async function updateOrderStatus(orderId, newStatus) {
-            // 1. Grab both buttons in this row so we can disable them together
-            const allBtns = document
-                .querySelectorAll(`button[data-order-id="${orderId}"]`);
-
-            // 2. Disable & show in-progress label on the clicked button
-            allBtns.forEach(btn => {
-                btn.disabled = true;
-                if (btn.dataset.status === newStatus) {
-                    btn.dataset.originalText = btn.innerHTML;
-                    btn.innerHTML = `
-                        <svg class="w-4 h-4 spinning" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3"
-                                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9
-                                   m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15">
-                            </path>
-                        </svg>
-                        ${i18n[currentLang].updating}
-                    `;
-                }
-            });
-
-            // 3. PATCH request
-            try {
-                const response = await fetch(
-                    `http://127.0.0.1:8001/api/v1/orders/${orderId}/status`,
-                    {
-                        method:  'PATCH',
-                        headers: { 'Content-Type': 'application/json' },
-                        body:    JSON.stringify({ status: newStatus }),
-                    }
-                );
-
-                if (!response.ok) {
-                    // Surface the backend error message when available
-                    let detail = `HTTP ${response.status}`;
-                    try {
-                        const errBody = await response.json();
-                        detail = errBody.detail || detail;
-                    } catch (_) { /* non-JSON body — keep status code */ }
-                    throw new Error(detail);
-                }
-
-                // 4a. Success — toast + silent table refresh
-                const toastMsg = newStatus === 'completed'
-                    ? i18n[currentLang].toastCompleted
-                    : i18n[currentLang].toastCancelled;
-
-                showToast(toastMsg, 'success');
-                await fetchOrders();     // re-renders the table; buttons auto-re-enabled
-
-            } catch (err) {
-                console.error('[updateOrderStatus] PATCH failed:', err);
-
-                // 4b. Failure — toast + restore buttons
-                showToast(i18n[currentLang].toastError, 'error');
-
-                allBtns.forEach(btn => {
-                    btn.disabled = false;
-                    if (btn.dataset.originalText) {
-                        btn.innerHTML          = btn.dataset.originalText;
-                        btn.dataset.originalText = '';
-                    }
-                });
-            }
-        }
-
-        // ── fetchOrders ───────────────────────────────────────────────────────
-        async function fetchOrders() {
-            const tbody      = document.getElementById('ordersTableBody');
-            const refreshIcon = document.getElementById('refreshIcon');
-
-            refreshIcon.classList.add('spinning');
-
-            tbody.innerHTML = `
-                <tr>
-                    <td colspan="9" class="px-6 py-20 text-center">
-                        <div class="flex flex-col items-center justify-center gap-4">
-                            <div class="loader-spinner"></div>
-                            <span class="text-gray-600 text-xl font-bold">
-                                ${i18n[currentLang].loadingMessage}
-                            </span>
-                        </div>
-                    </td>
-                </tr>
-            `;
-
-            try {
-                const response = await fetch('http://127.0.0.1:8001/api/v1/orders');
-
-                if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
-                const data   = await response.json();
-                const orders = Array.isArray(data) ? data : (data.orders || []);
-
-                if (orders.length === 0) {
-                    tbody.innerHTML = `
-                        <tr>
-                            <td colspan="9" class="px-6 py-20 text-center">
-                                <div class="flex flex-col items-center gap-5">
-                                    <svg class="w-24 h-24 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                            d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0
-                                               01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0
-                                               01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0
-                                               006.586 13H4">
-                                        </path>
-                                    </svg>
-                                    <span class="text-gray-400 text-2xl font-bold">
-                                        ${i18n[currentLang].noOrders}
-                                    </span>
-                                </div>
-                            </td>
-                        </tr>
-                    `;
-                    updateStats([]);
-                    return;
-                }
-
-                tbody.innerHTML = orders.map(order => {
-                    const safeId      = String(order._id || order.id || 'N/A');
-                    const shortId     = safeId.slice(-8);
-                    const safeCustomer = String(order.customer_name || 'N/A');
-                    const safePhone   = String(order.phone_number || order.whatsapp_sender || 'N/A');
-                    const safeAddress = String(order.delivery_address || 'N/A');
-                    const displayAddress = safeAddress.length > 45
-                        ? safeAddress.substring(0, 45) + '…'
-                        : safeAddress;
-                    const safeItems = Array.isArray(order.items) ? order.items.length : 0;
-                    const safeTotal = parseFloat(order.total_price || 0).toFixed(2);
-                    const safeStatus = String(order.status || 'pending').toLowerCase();
-                    const safeDate   = order.created_at
-                        ? new Date(order.created_at).toLocaleDateString(
-                            currentLang === 'ar' ? 'ar-MA'
-                            : currentLang === 'fr' ? 'fr-FR'
-                            : 'en-US',
-                            { year: 'numeric', month: 'short', day: 'numeric' }
-                          )
-                        : 'N/A';
-
-                    const statusKey  = `status${safeStatus.charAt(0).toUpperCase()}${safeStatus.slice(1)}`;
-                    const statusText = i18n[currentLang][statusKey] || safeStatus;
-                    const statusClass = `status-${safeStatus}`;
-
-                    const statusIcon = {
-                        pending:    '⏱️',
-                        confirmed:  '✅',
-                        delivering: '🚚',
-                        delivered:  '📦',
-                        cancelled:  '❌',
-                        completed:  '✔️'
-                    }[safeStatus] || '📋';
-
-                    // Hide action buttons for terminal statuses
-                    const isTerminal = ['completed', 'cancelled'].includes(safeStatus);
-                    const actionButtons = isTerminal
-                        ? `<span class="text-gray-400 text-sm font-semibold italic">—</span>`
-                        : `
-                            <div class="flex gap-3 flex-wrap">
-                                <button
-                                    class="action-btn btn-complete"
-                                    data-order-id="${safeId}"
-                                    data-status="completed"
-                                    onclick="updateOrderStatus('${safeId}', 'completed')"
-                                >
-                                    ${i18n[currentLang].btnComplete}
-                                </button>
-                                <button
-                                    class="action-btn btn-cancel"
-                                    data-order-id="${safeId}"
-                                    data-status="cancelled"
-                                    onclick="updateOrderStatus('${safeId}', 'cancelled')"
-                                >
-                                    ${i18n[currentLang].btnCancel}
-                                </button>
-                            </div>
-                          `;
-
-                    return `
-                        <tr class="hover:shadow-lg transition-all duration-200">
-                            <td class="px-6 py-6">
-                                <span class="text-sm font-mono font-black text-[#2E8B57]">#${shortId}</span>
-                            </td>
-                            <td class="px-6 py-6">
-                                <div class="flex items-center gap-3">
-                                    <div class="w-11 h-11 bg-gradient-to-br from-[#2E8B57] to-[#3FAA6F] rounded-full flex items-center justify-center text-white font-black text-lg shadow-lg">
-                                        ${safeCustomer.charAt(0).toUpperCase()}
-                                    </div>
-                                    <span class="text-sm font-bold text-gray-800">${safeCustomer}</span>
-                                </div>
-                            </td>
-                            <td class="px-6 py-6">
-                                <div class="flex items-center gap-2">
-                                    <svg class="w-5 h-5 text-[#2E8B57]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                            d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0
-                                               01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1
-                                               1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716
-                                               21 3 14.284 3 6V5z">
-                                        </path>
-                                    </svg>
-                                    <span class="text-sm text-gray-700 font-semibold">${safePhone}</span>
-                                </div>
-                            </td>
-                            <td class="px-6 py-6">
-                                <div class="flex items-center gap-2" title="${safeAddress}">
-                                    <svg class="w-5 h-5 text-[#FF9800] flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                            d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0
-                                               1111.314 0z">
-                                        </path>
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                            d="M15 11a3 3 0 11-6 0 3 3 0 016 0z">
-                                        </path>
-                                    </svg>
-                                    <span class="text-sm text-gray-600 font-medium">${displayAddress}</span>
-                                </div>
-                            </td>
-                            <td class="px-6 py-6">
-                                <div class="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-br from-[#2E8B57]/10 to-[#2E8B57]/20 rounded-xl border-2 border-[#2E8B57]/30">
-                                    <svg class="w-5 h-5 text-[#2E8B57]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                            d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z">
-                                        </path>
-                                    </svg>
-                                    <span class="text-sm font-black text-[#2E8B57]">${safeItems}</span>
-                                </div>
-                            </td>
-                            <td class="px-6 py-6">
-                                <span class="text-lg font-black text-[#FF9800]">${safeTotal} DH</span>
-                            </td>
-                            <td class="px-6 py-6">
-                                <span class="status-badge ${statusClass}">
-                                    <span>${statusIcon}</span>
-                                    <span>${statusText}</span>
-                                </span>
-                            </td>
-                            <td class="px-6 py-6">
-                                <div class="flex items-center gap-2">
-                                    <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                            d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0
-                                               00-2 2v12a2 2 0 002 2z">
-                                        </path>
-                                    </svg>
-                                    <span class="text-sm text-gray-600 font-semibold">${safeDate}</span>
-                                </div>
-                            </td>
-                            <td class="px-6 py-6">${actionButtons}</td>
-                        </tr>
-                    `;
-                }).join('');
-
-                updateStats(orders);
-
-            } catch (error) {
-                console.error('[fetchOrders] error:', error);
-                tbody.innerHTML = `
+    <!-- Orders Table -->
+    <div class="glass-container rounded-3xl overflow-hidden shadow-2xl">
+        <div class="p-8 brand-gradient">
+            <h2 class="text-4xl font-black text-white flex items-center gap-4" id="ordersTableTitle">
+                <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                Recent Orders
+            </h2>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-gradient-to-r from-gray-100 via-green-50 to-orange-50">
+                    <tr>
+                        <th class="px-6 py-6 text-left text-xs font-black text-[#2E8B57] uppercase tracking-widest border-b-2 border-[#2E8B57]" id="orderIdHeader">Order ID</th>
+                        <th class="px-6 py-6 text-left text-xs font-black text-[#2E8B57] uppercase tracking-widest border-b-2 border-[#2E8B57]" id="customerHeader">Customer</th>
+                        <th class="px-6 py-6 text-left text-xs font-black text-[#2E8B57] uppercase tracking-widest border-b-2 border-[#2E8B57]" id="phoneHeader">Phone</th>
+                        <th class="px-6 py-6 text-left text-xs font-black text-[#2E8B57] uppercase tracking-widest border-b-2 border-[#2E8B57]" id="addressHeader">Address</th>
+                        <th class="px-6 py-6 text-left text-xs font-black text-[#2E8B57] uppercase tracking-widest border-b-2 border-[#2E8B57]" id="itemsHeader">Items</th>
+                        <th class="px-6 py-6 text-left text-xs font-black text-[#2E8B57] uppercase tracking-widest border-b-2 border-[#2E8B57]" id="totalHeader">Total</th>
+                        <th class="px-6 py-6 text-left text-xs font-black text-[#2E8B57] uppercase tracking-widest border-b-2 border-[#2E8B57]" id="statusHeader">Status</th>
+                        <th class="px-6 py-6 text-left text-xs font-black text-[#2E8B57] uppercase tracking-widest border-b-2 border-[#2E8B57]" id="dateHeader">Date</th>
+                        <th class="px-6 py-6 text-left text-xs font-black text-[#2E8B57] uppercase tracking-widest border-b-2 border-[#2E8B57]" id="actionsHeader">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="ordersTableBody" class="divide-y divide-gray-200">
                     <tr>
                         <td colspan="9" class="px-6 py-20 text-center">
-                            <div class="flex flex-col items-center gap-5">
-                                <svg class="w-24 h-24 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z">
-                                    </path>
-                                </svg>
-                                <span class="text-red-500 font-black text-2xl">
-                                    ${i18n[currentLang].errorFetching}
-                                </span>
-                                <span class="text-gray-500 text-sm font-semibold">
-                                    Backend: http://127.0.0.1:8001/api/v1/orders
-                                </span>
+                            <div class="flex flex-col items-center justify-center gap-4">
+                                <div class="loader-spinner"></div>
+                                <span class="text-gray-600 text-xl font-bold" id="loadingMessage">Loading orders...</span>
                             </div>
                         </td>
                     </tr>
-                `;
-                updateStats([]);
-            } finally {
-                refreshIcon.classList.remove('spinning');
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+    // ── ✅ Single source of truth for API base URL ─────────────────────────────
+    const API_BASE = 'http://127.0.0.1:8000';
+
+    // ── i18n ──────────────────────────────────────────────────────────────────
+    const i18n = {
+        en: {
+            dashboardTitle: "GreenGo Market Admin",
+            dashboardSubtitle: "Order Management Dashboard",
+            refreshBtn: "Refresh",
+            totalOrdersLabel: "Total Orders",
+            pendingLabel: "Pending",
+            preparingLabel: "Preparing",
+            deliveringLabel: "Out for Delivery",
+            completedLabel: "Completed",
+            ordersTableTitle: "Recent Orders",
+            orderIdHeader: "Order ID", customerHeader: "Customer",
+            phoneHeader: "Phone", addressHeader: "Address",
+            itemsHeader: "Items", totalHeader: "Total",
+            statusHeader: "Status", dateHeader: "Date", actionsHeader: "Actions",
+            loadingMessage: "Loading orders...",
+            noOrders: "No orders found",
+            errorFetching: "Error fetching orders. Is the backend running on port 8000?",
+            statusPending: "Pending", statusPreparing: "Preparing",
+            statusOut_for_delivery: "Out for Delivery",
+            statusDelivered: "Delivered", statusCompleted: "Completed",
+            statusCancelled: "Cancelled", statusConfirmed: "Confirmed",
+            btnPreparing: "🍳 Prepare", btnOutForDelivery: "🛵 Out for Delivery",
+            btnComplete: "✓ Complete", btnCancel: "✕ Cancel",
+            toastPreparing: "🍳 Order is now being prepared!",
+            toastOutForDelivery: "🛵 Order is out for delivery!",
+            toastCompleted: "✅ Order marked as completed!",
+            toastCancelled: "❌ Order cancelled.",
+            toastError: "⚠️ Failed to update order. Please try again.",
+            updating: "Updating…"
+        },
+        fr: {
+            dashboardTitle: "GreenGo Market Admin",
+            dashboardSubtitle: "Tableau de bord de gestion des commandes",
+            refreshBtn: "Actualiser",
+            totalOrdersLabel: "Total Commandes", pendingLabel: "En attente",
+            preparingLabel: "En préparation", deliveringLabel: "En livraison",
+            completedLabel: "Complétées",
+            ordersTableTitle: "Commandes Récentes",
+            orderIdHeader: "ID", customerHeader: "Client",
+            phoneHeader: "Téléphone", addressHeader: "Adresse",
+            itemsHeader: "Articles", totalHeader: "Total",
+            statusHeader: "Statut", dateHeader: "Date", actionsHeader: "Actions",
+            loadingMessage: "Chargement...",
+            noOrders: "Aucune commande trouvée",
+            errorFetching: "Erreur de chargement. Le backend tourne sur le port 8000 ?",
+            statusPending: "En attente", statusPreparing: "En préparation",
+            statusOut_for_delivery: "En livraison",
+            statusDelivered: "Livré", statusCompleted: "Complété",
+            statusCancelled: "Annulé", statusConfirmed: "Confirmé",
+            btnPreparing: "🍳 Préparer", btnOutForDelivery: "🛵 En livraison",
+            btnComplete: "✓ Compléter", btnCancel: "✕ Annuler",
+            toastPreparing: "🍳 Commande en préparation !",
+            toastOutForDelivery: "🛵 Commande en route !",
+            toastCompleted: "✅ Commande complétée !",
+            toastCancelled: "❌ Commande annulée.",
+            toastError: "⚠️ Échec de la mise à jour.",
+            updating: "Mise à jour…"
+        },
+        ar: {
+            dashboardTitle: "إدارة سوق GreenGo",
+            dashboardSubtitle: "لوحة تحكم إدارة الطلبات",
+            refreshBtn: "تحديث",
+            totalOrdersLabel: "إجمالي الطلبات", pendingLabel: "قيد الانتظار",
+            preparingLabel: "قيد التحضير", deliveringLabel: "قيد التوصيل",
+            completedLabel: "مكتملة",
+            ordersTableTitle: "الطلبات الأخيرة",
+            orderIdHeader: "رقم", customerHeader: "العميل",
+            phoneHeader: "الهاتف", addressHeader: "العنوان",
+            itemsHeader: "المنتجات", totalHeader: "المجموع",
+            statusHeader: "الحالة", dateHeader: "التاريخ", actionsHeader: "الإجراءات",
+            loadingMessage: "جاري التحميل...",
+            noOrders: "لا توجد طلبات",
+            errorFetching: "خطأ في التحميل. هل الخادم يعمل على المنفذ 8000؟",
+            statusPending: "قيد الانتظار", statusPreparing: "قيد التحضير",
+            statusOut_for_delivery: "قيد التوصيل",
+            statusDelivered: "تم التوصيل", statusCompleted: "مكتمل",
+            statusCancelled: "ملغى", statusConfirmed: "مؤكد",
+            btnPreparing: "🍳 تحضير", btnOutForDelivery: "🛵 للتوصيل",
+            btnComplete: "✓ إكمال", btnCancel: "✕ إلغاء",
+            toastPreparing: "🍳 الطلب قيد التحضير!",
+            toastOutForDelivery: "🛵 الطلب في الطريق!",
+            toastCompleted: "✅ تم إكمال الطلب!",
+            toastCancelled: "❌ تم إلغاء الطلب.",
+            toastError: "⚠️ فشل تحديث الطلب.",
+            updating: "جاري التحديث…"
+        }
+    };
+
+    let currentLang = 'en';
+    let _toastTimer = null;
+
+    // ── Toast ─────────────────────────────────────────────────────────────────
+    function showToast(message, type = 'success') {
+        const toast = document.getElementById('toast');
+        if (_toastTimer) clearTimeout(_toastTimer);
+        toast.textContent = message;
+        toast.className   = `toast-${type} toast-show`;
+        _toastTimer = setTimeout(() => toast.classList.remove('toast-show'), 3500);
+    }
+
+    // ── Language ──────────────────────────────────────────────────────────────
+    function setLanguage(lang) {
+        currentLang = lang;
+        document.documentElement.setAttribute('lang', lang);
+        document.documentElement.setAttribute('dir', lang === 'ar' ? 'rtl' : 'ltr');
+        Object.keys(i18n[lang]).forEach(key => {
+            const el = document.getElementById(key);
+            if (el) el.textContent = i18n[lang][key];
+        });
+        fetchOrders();
+    }
+
+    // ── updateOrderStatus — PATCH /api/v1/orders/{id}/status ─────────────────
+    async function updateOrderStatus(orderId, newStatus) {
+        // Disable all buttons on this row while the request is in flight
+        const allBtns = document.querySelectorAll(`button[data-order-id="${orderId}"]`);
+        allBtns.forEach(btn => {
+            btn.disabled = true;
+            if (btn.dataset.status === newStatus) {
+                btn.dataset.originalHtml = btn.innerHTML;
+                btn.innerHTML = `
+                    <svg class="w-4 h-4 spinning" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3"
+                            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9
+                               m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                    </svg>
+                    ${i18n[currentLang].updating}`;
             }
+        });
+
+        try {
+            const res = await fetch(
+                `${API_BASE}/api/v1/orders/${orderId}/status`,
+                {
+                    method:  'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body:    JSON.stringify({ status: newStatus }),
+                }
+            );
+
+            if (!res.ok) {
+                let detail = `HTTP ${res.status}`;
+                try { const b = await res.json(); detail = b.detail || detail; } catch (_) {}
+                throw new Error(detail);
+            }
+
+            // ── Success: show toast + refresh table ───────────────────────────
+            const toastMap = {
+                preparing:        i18n[currentLang].toastPreparing,
+                out_for_delivery: i18n[currentLang].toastOutForDelivery,
+                completed:        i18n[currentLang].toastCompleted,
+                cancelled:        i18n[currentLang].toastCancelled,
+            };
+            showToast(toastMap[newStatus] || i18n[currentLang].toastCompleted, 'success');
+            await fetchOrders();   // re-renders the table; buttons re-enabled automatically
+
+        } catch (err) {
+            console.error('[updateOrderStatus] PATCH failed:', err);
+            showToast(i18n[currentLang].toastError, 'error');
+
+            // Restore buttons on failure
+            allBtns.forEach(btn => {
+                btn.disabled = false;
+                if (btn.dataset.originalHtml) {
+                    btn.innerHTML          = btn.dataset.originalHtml;
+                    btn.dataset.originalHtml = '';
+                }
+            });
+        }
+    }
+
+    // ── Build action buttons based on current status ──────────────────────────
+    function buildActionButtons(orderId, status) {
+        // Terminal statuses — no further actions
+        if (['completed', 'cancelled'].includes(status)) {
+            return `<span class="text-gray-400 text-sm font-semibold italic">—</span>`;
         }
 
-        // ── updateStats ───────────────────────────────────────────────────────
-        function updateStats(orders) {
-            const s = (status) =>
-                orders.filter(o => String(o.status || '').toLowerCase() === status).length;
+        const L = i18n[currentLang];
+        const btn = (cls, dataStatus, label) =>
+            `<button
+                class="action-btn ${cls}"
+                data-order-id="${orderId}"
+                data-status="${dataStatus}"
+                onclick="updateOrderStatus('${orderId}', '${dataStatus}')"
+            >${label}</button>`;
 
-            document.getElementById('totalOrders').textContent    = orders.length;
-            document.getElementById('pendingCount').textContent   = s('pending');
-            document.getElementById('confirmedCount').textContent = s('confirmed');
-            document.getElementById('deliveringCount').textContent = s('delivering');
-            document.getElementById('deliveredCount').textContent  = s('delivered');
+        // Next logical transitions per current status
+        const transitions = {
+            pending:          [btn('btn-preparing', 'preparing', L.btnPreparing),        btn('btn-cancel', 'cancelled', L.btnCancel)],
+            preparing:        [btn('btn-delivery',  'out_for_delivery', L.btnOutForDelivery), btn('btn-cancel', 'cancelled', L.btnCancel)],
+            out_for_delivery: [btn('btn-complete',  'completed', L.btnComplete),         btn('btn-cancel', 'cancelled', L.btnCancel)],
+            delivered:        [btn('btn-complete',  'completed', L.btnComplete)],
+            confirmed:        [btn('btn-preparing', 'preparing', L.btnPreparing),        btn('btn-cancel', 'cancelled', L.btnCancel)],
+        };
+
+        const buttons = transitions[status] || [btn('btn-complete', 'completed', L.btnComplete), btn('btn-cancel', 'cancelled', L.btnCancel)];
+        return `<div class="flex gap-2 flex-wrap">${buttons.join('')}</div>`;
+    }
+
+    // ── fetchOrders ───────────────────────────────────────────────────────────
+    async function fetchOrders() {
+        const tbody       = document.getElementById('ordersTableBody');
+        const refreshIcon = document.getElementById('refreshIcon');
+
+        refreshIcon.classList.add('spinning');
+        tbody.innerHTML = `
+            <tr><td colspan="9" class="px-6 py-20 text-center">
+                <div class="flex flex-col items-center justify-center gap-4">
+                    <div class="loader-spinner"></div>
+                    <span class="text-gray-600 text-xl font-bold">${i18n[currentLang].loadingMessage}</span>
+                </div>
+            </td></tr>`;
+
+        try {
+            const res = await fetch(`${API_BASE}/api/v1/orders`);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+            const data   = await res.json();
+            const orders = Array.isArray(data) ? data : (data.orders || []);
+
+            if (orders.length === 0) {
+                tbody.innerHTML = `
+                    <tr><td colspan="9" class="px-6 py-20 text-center">
+                        <div class="flex flex-col items-center gap-5">
+                            <svg class="w-24 h-24 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/>
+                            </svg>
+                            <span class="text-gray-400 text-2xl font-bold">${i18n[currentLang].noOrders}</span>
+                        </div>
+                    </td></tr>`;
+                updateStats([]);
+                return;
+            }
+
+            tbody.innerHTML = orders.map(order => {
+                const safeId      = String(order._id || order.id || 'N/A');
+                const shortId     = safeId.slice(-8);
+                const safeCustomer = String(order.customer_name || order.customer_phone || 'N/A');
+                const safePhone   = String(order.customer_phone || order.whatsapp_sender || 'N/A');
+                const safeAddress = String(order.delivery_address || 'N/A');
+                const displayAddr = safeAddress.length > 40 ? safeAddress.substring(0, 40) + '…' : safeAddress;
+                const itemCount   = Array.isArray(order.items) ? order.items.length : 0;
+                const safeTotal   = parseFloat(order.total_price || 0).toFixed(2);
+                const safeStatus  = String(order.status || 'pending').toLowerCase();
+                const safeDate    = order.created_at
+                    ? new Date(order.created_at).toLocaleDateString(
+                        currentLang === 'ar' ? 'ar-MA' : currentLang === 'fr' ? 'fr-FR' : 'en-US',
+                        { year:'numeric', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' })
+                    : 'N/A';
+
+                // i18n status label
+                const statusKey   = `status${safeStatus.charAt(0).toUpperCase()}${safeStatus.slice(1)}`;
+                const statusText  = i18n[currentLang][statusKey] || safeStatus;
+                const statusClass = `status-${safeStatus}`;
+                const statusIcon  = {
+                    pending:'⏱️', preparing:'🍳', out_for_delivery:'🛵',
+                    delivered:'📦', completed:'✔️', cancelled:'❌', confirmed:'✅'
+                }[safeStatus] || '📋';
+
+                // Item detail list (collapsed, title tooltip)
+                const itemNames = Array.isArray(order.items)
+                    ? order.items.map(i => `${i.quantity || 1}× ${i.item_name || i.name || '?'}`).join(', ')
+                    : '';
+
+                return `
+                <tr class="hover:shadow-lg transition-all duration-200">
+                    <td class="px-6 py-5">
+                        <span class="text-sm font-mono font-black text-[#2E8B57]">#${shortId}</span>
+                    </td>
+                    <td class="px-6 py-5">
+                        <div class="flex items-center gap-3">
+                            <div class="w-10 h-10 bg-gradient-to-br from-[#2E8B57] to-[#3FAA6F] rounded-full flex items-center justify-center text-white font-black text-base shadow">
+                                ${safeCustomer.charAt(0).toUpperCase()}
+                            </div>
+                            <span class="text-sm font-bold text-gray-800">${safeCustomer}</span>
+                        </div>
+                    </td>
+                    <td class="px-6 py-5">
+                        <span class="text-sm text-gray-700 font-semibold">${safePhone}</span>
+                    </td>
+                    <td class="px-6 py-5" title="${safeAddress}">
+                        <span class="text-sm text-gray-600">${displayAddr}</span>
+                    </td>
+                    <td class="px-6 py-5">
+                        <div class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#f0faf4] rounded-xl border border-[#2E8B57]/20" title="${itemNames}">
+                            <svg class="w-4 h-4 text-[#2E8B57]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/></svg>
+                            <span class="text-sm font-black text-[#2E8B57]">${itemCount}</span>
+                        </div>
+                    </td>
+                    <td class="px-6 py-5">
+                        <span class="text-base font-black text-[#FF9800]">${safeTotal} DH</span>
+                    </td>
+                    <td class="px-6 py-5">
+                        <span class="status-badge ${statusClass}">
+                            <span>${statusIcon}</span><span>${statusText}</span>
+                        </span>
+                    </td>
+                    <td class="px-6 py-5">
+                        <span class="text-sm text-gray-500">${safeDate}</span>
+                    </td>
+                    <td class="px-6 py-5">
+                        ${buildActionButtons(safeId, safeStatus)}
+                    </td>
+                </tr>`;
+            }).join('');
+
+            updateStats(orders);
+
+        } catch (err) {
+            console.error('[fetchOrders] error:', err);
+            tbody.innerHTML = `
+                <tr><td colspan="9" class="px-6 py-20 text-center">
+                    <div class="flex flex-col items-center gap-5">
+                        <svg class="w-24 h-24 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                        <span class="text-red-500 font-black text-2xl">${i18n[currentLang].errorFetching}</span>
+                        <span class="text-gray-400 text-sm">Endpoint: ${API_BASE}/api/v1/orders</span>
+                    </div>
+                </td></tr>`;
+            updateStats([]);
+        } finally {
+            refreshIcon.classList.remove('spinning');
         }
+    }
 
-        // ── Boot ──────────────────────────────────────────────────────────────
-        window.addEventListener('DOMContentLoaded', fetchOrders);
-    </script>
+    // ── updateStats ───────────────────────────────────────────────────────────
+    function updateStats(orders) {
+        const count = (s) => orders.filter(o => String(o.status || '').toLowerCase() === s).length;
+        document.getElementById('totalOrders').textContent    = orders.length;
+        document.getElementById('pendingCount').textContent   = count('pending');
+        document.getElementById('preparingCount').textContent = count('preparing');
+        document.getElementById('deliveringCount').textContent = count('out_for_delivery');
+        document.getElementById('completedCount').textContent  = count('completed');
+    }
+
+    // ── Boot ──────────────────────────────────────────────────────────────────
+    window.addEventListener('DOMContentLoaded', fetchOrders);
+</script>
 </body>
 </html>

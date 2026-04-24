@@ -1,0 +1,265 @@
+﻿// src/components/layout/Header.tsx
+import { useState, useRef, useEffect } from "react";
+import { Link, NavLink } from "react-router-dom";
+import {
+  ShoppingCart, Leaf, Menu, X, MessageCircle,
+  User, Package, MapPin, ChevronDown,
+} from "lucide-react";
+import { useCartStore } from "../../store/cartStore";
+import { useLanguage } from "../../contexts/LanguageContext";
+import type { SupportedLanguage } from "../../utils/translations";
+
+const LANGS: { code: SupportedLanguage; label: string }[] = [
+  { code: "ar", label: "AR" },
+  { code: "fr", label: "FR" },
+  { code: "en", label: "EN" },
+];
+
+const WA_HREF = "https://wa.me/212664500789";
+const WA_REL  = "noopener noreferrer";
+
+function desktopNavCls({ isActive }: { isActive: boolean }): string {
+  return isActive
+    ? "rounded-lg px-4 py-2 text-sm font-semibold text-[#FF9800] transition-colors"
+    : "rounded-lg px-4 py-2 text-sm font-semibold text-white/65 transition-colors hover:bg-white/5 hover:text-white";
+}
+function mobileNavCls({ isActive }: { isActive: boolean }): string {
+  return isActive
+    ? "flex items-center rounded-xl px-4 py-3 text-sm font-semibold bg-white/10 text-white transition-colors"
+    : "flex items-center rounded-xl px-4 py-3 text-sm font-semibold text-white/70 transition-colors hover:bg-white/10 hover:text-white";
+}
+function dropCls(on: boolean): string {
+  return on
+    ? "flex w-full items-center justify-between px-4 py-2.5 text-xs font-bold bg-[#2E8B57] text-white transition-colors"
+    : "flex w-full items-center justify-between px-4 py-2.5 text-xs font-bold text-white/65 transition-colors hover:bg-white/5 hover:text-white";
+}
+function pillCls(on: boolean): string {
+  return on
+    ? "flex-1 rounded-xl py-2 text-xs font-extrabold bg-[#2E8B57] text-white shadow-sm transition-colors"
+    : "flex-1 rounded-xl py-2 text-xs font-extrabold bg-white/5 text-white/55 transition-colors hover:bg-white/10 hover:text-white";
+}
+
+export default function Header() {
+  const { t, language, setLanguage, isRTL } = useLanguage();
+  const cart       = useCartStore((s) => s.cart);
+  const totalPrice = useCartStore((s) => s.totalPrice);
+  const totalItems = cart.reduce((n, i) => n + (i.cartQuantity || 0), 0);
+
+  const [mobileOpen,  setMobileOpen]  = useState(false);
+  const [langOpen,    setLangOpen]    = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
+  const accountRef = useRef<HTMLDivElement>(null);
+
+  const dir      = isRTL ? "rtl" : "ltr";
+  const font     = language === "ar" ? "font-arabic" : "font-latin";
+  const sub      = language === "ar" ? "\u0633\u0648\u0642 \u0637\u0627\u0632\u062c" : language === "fr" ? "March\u00e9 Frais" : "Fresh Market";
+  const expanded = langOpen    ? "true" : "false";
+  const chevron  = langOpen    ? "\u25b4" : "\u25be";
+  const accChev  = accountOpen ? "\u25b4" : "\u25be";
+  const hasItems = totalItems > 0;
+  const badge    = totalItems > 99 ? "99+" : String(totalItems);
+
+  const links = [
+    { to: "/shop",    label: language === "ar" ? "\u0627\u0644\u0643\u062a\u0627\u0644\u0648\u062c" : language === "fr" ? "Catalogue" : "Catalog" },
+    { to: "/contact", label: t("nav_contact") },
+  ];
+
+  // Account menu items
+  const accountItems = [
+    { icon: User,    href: "/profile",  label_fr: "Mon profil",          label_ar: "\u062d\u0633\u0627\u0628\u064a",         label_en: "My Profile" },
+    { icon: Package, href: "/orders",   label_fr: "Mes commandes",       label_ar: "\u0637\u0644\u0628\u064a\u0627\u062a\u064a",      label_en: "My Orders" },
+    { icon: MapPin,  href: "/addresses",label_fr: "Mes adresses",        label_ar: "\u0639\u0646\u0627\u0648\u064a\u0646\u064a",      label_en: "My Addresses" },
+  ];
+
+  function acctLabel(item: typeof accountItems[0]): string {
+    if (language === "ar") return item.label_ar;
+    if (language === "fr") return item.label_fr;
+    return item.label_en;
+  }
+
+  const close    = () => { setMobileOpen(false); setLangOpen(false); setAccountOpen(false); };
+  const tglMob   = () => { setMobileOpen((p) => !p); setLangOpen(false); setAccountOpen(false); };
+  const tglLng   = () => { setLangOpen((p) => !p); setAccountOpen(false); };
+  const tglAcct  = () => { setAccountOpen((p) => !p); setLangOpen(false); };
+  const pickD    = (c: SupportedLanguage) => { setLanguage(c); setLangOpen(false); };
+  const pickM    = (c: SupportedLanguage) => { setLanguage(c); close(); };
+
+  // Close account dropdown on outside click
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (accountRef.current && !accountRef.current.contains(e.target as Node)) {
+        setAccountOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  const acctLabel_main = language === "ar" ? "\u062d\u0633\u0627\u0628\u064a" : language === "fr" ? "Mon compte" : "My Account";
+
+  return (
+    <header className={"sticky top-0 z-50 w-full " + font} style={{ background: "#0d3b36" }}>
+
+      <div dir={dir} className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 md:py-4">
+
+        {/* Brand */}
+        <Link to="/" onClick={close} className="group flex items-center gap-2.5 select-none no-underline">
+          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#2E8B57] shadow-lg transition-transform duration-200 group-hover:scale-105">
+            <Leaf size={18} className="text-white" strokeWidth={2.5} />
+          </div>
+          <div className="leading-none">
+            <span className="block text-lg font-extrabold tracking-tight text-white font-latin">GreenGo</span>
+            <span className={"block text-[9px] font-semibold uppercase tracking-widest text-[#FF9800]/80 " + font}>{sub}</span>
+          </div>
+        </Link>
+
+        {/* Desktop nav */}
+        <nav className="hidden items-center gap-1 md:flex">
+          {links.map(({ to, label }) => (
+            <NavLink key={to} to={to} end={to === "/"} className={desktopNavCls}>
+              {label}
+            </NavLink>
+          ))}
+        </nav>
+
+        {/* Right cluster */}
+        <div className="flex items-center gap-2">
+
+          {/* Lang dropdown */}
+          <div className="relative hidden md:block">
+            <button onClick={tglLng} aria-label="Select language" aria-expanded={expanded}
+              className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold text-white/75 transition-colors hover:bg-white/10 hover:text-white">
+              <span>{language.toUpperCase()}</span>
+              <span className="text-[10px]">{chevron}</span>
+            </button>
+            {langOpen && (
+              <div className="absolute right-0 top-full mt-2 w-24 overflow-hidden rounded-xl border border-white/10 bg-[#0d3b36] shadow-xl">
+                {LANGS.map(({ code, label }) => (
+                  <button key={code} onClick={() => pickD(code)} className={dropCls(language === code)}>
+                    <span>{label}</span>
+                    {language === code && <span className="text-[10px]">\u2713</span>}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* WhatsApp */}
+          <a href={WA_HREF} target="_blank" rel={WA_REL}
+            className="hidden items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white/65 transition-colors hover:bg-white/10 hover:text-white md:flex">
+            <MessageCircle size={13} />
+            <span>{t("nav_whatsapp")}</span>
+          </a>
+
+          {/* My Account dropdown */}
+          <div ref={accountRef} className="relative hidden md:block">
+            <button onClick={tglAcct}
+              className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white/65 transition-colors hover:bg-white/10 hover:text-white">
+              <User size={13} />
+              <span className={font}>{acctLabel_main}</span>
+              <ChevronDown size={10} className={"transition-transform duration-200 " + (accountOpen ? "rotate-180" : "")} />
+            </button>
+            {accountOpen && (
+              <div className={"absolute top-full mt-2 w-48 overflow-hidden rounded-xl border border-white/10 bg-[#0d3b36] shadow-xl " + (isRTL ? "left-0" : "right-0")}>
+                <div className="border-b border-white/8 px-4 py-2.5">
+                  <p className={"text-[10px] font-bold uppercase tracking-widest text-white/30 " + font}>
+                    {acctLabel_main}
+                  </p>
+                </div>
+                {accountItems.map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <Link key={item.href} to={item.href} onClick={close}
+                      className={"flex items-center gap-3 px-4 py-3 text-xs font-semibold text-white/60 transition-colors hover:bg-white/5 hover:text-white " + (isRTL ? "flex-row-reverse" : "")}>
+                      <Icon size={13} className="shrink-0 text-[#2E8B57]" />
+                      <span className={font}>{acctLabel(item)}</span>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Admin icon */}
+          <Link to="/admin" className="hidden text-[11px] font-semibold text-white/30 transition-colors hover:text-white/60 md:inline">
+            \u2699\ufe0f
+          </Link>
+
+          {/* Cart */}
+          <Link to="/cart" aria-label={t("nav_cart")}
+            className="relative flex items-center gap-2 rounded-xl bg-[#2E8B57] px-3 py-2 text-sm font-bold text-white shadow-md transition-all hover:bg-[#1F6B40] hover:shadow-lg active:scale-95">
+            <ShoppingCart size={18} strokeWidth={2} />
+            {hasItems && <span className="absolute -right-2 -top-2 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-[#FF9800] px-1 text-[10px] font-extrabold text-white shadow">{badge}</span>}
+            {hasItems && <span className="hidden text-sm font-semibold md:inline">{totalPrice().toFixed(2)} MAD</span>}
+          </Link>
+
+          {/* Hamburger */}
+          <button onClick={tglMob} aria-label="Toggle menu"
+            className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-white transition-colors hover:bg-white/10 md:hidden">
+            {mobileOpen ? <X size={18} /> : <Menu size={18} />}
+          </button>
+
+        </div>
+      </div>
+
+      <div className="zellige-border" />
+
+      {/* Mobile drawer */}
+      {mobileOpen && (
+        <div dir={dir} className={"border-t border-white/10 md:hidden " + font} style={{ background: "#0a2e2a" }}>
+          <nav className="flex flex-col space-y-1 px-4 py-3">
+
+            {links.map(({ to, label }) => (
+              <NavLink key={to} to={to} end={to === "/"} onClick={close} className={mobileNavCls}>
+                {label}
+              </NavLink>
+            ))}
+
+            {/* My Account section */}
+            <div className="border-t border-white/10 pt-3">
+              <p className={"mb-2 px-1 text-[10px] font-bold uppercase tracking-widest text-white/30 " + font}>
+                {acctLabel_main}
+              </p>
+              <div className="space-y-1">
+                {accountItems.map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <Link key={item.href} to={item.href} onClick={close}
+                      className={"flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-semibold text-white/60 transition-colors hover:bg-white/10 hover:text-white " + (isRTL ? "flex-row-reverse" : "")}>
+                      <Icon size={14} className="shrink-0 text-[#2E8B57]" />
+                      <span className={font}>{acctLabel(item)}</span>
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Language pills */}
+            <div className="border-t border-white/10 pt-3">
+              <p className="mb-2 px-1 text-[10px] font-bold uppercase tracking-widest text-white/30">Language</p>
+              <div className="flex gap-2">
+                {LANGS.map(({ code, label }) => (
+                  <button key={code} onClick={() => pickM(code)} className={pillCls(language === code)}>{label}</button>
+                ))}
+              </div>
+            </div>
+
+            <a href={WA_HREF} target="_blank" rel={WA_REL} onClick={close}
+              className="flex items-center gap-2 rounded-xl bg-white/5 px-4 py-3 text-sm font-semibold text-white/65 transition-colors hover:bg-white/10 hover:text-white">
+              <MessageCircle size={15} />
+              <span>{t("nav_whatsapp")}</span>
+            </a>
+
+            <Link to="/admin" onClick={close}
+              className="flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold text-white/25 transition-colors hover:text-white/50">
+              <span>\u2699\ufe0f {t("nav_admin")}</span>
+            </Link>
+
+          </nav>
+        </div>
+      )}
+
+    </header>
+  );
+}
+

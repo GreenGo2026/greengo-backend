@@ -1,0 +1,96 @@
+﻿{
+  "products": {
+    "طماطم": {
+      "price_per_unit": 10.0,
+      "unit": "kg",
+      "available": true,
+      "yesterday_price": 5.0,
+      "updated_at": "2026-04-17T21:14:51.853942+00:00"
+    },
+    "بطاطا": {
+      "price_per_unit": 4.0,
+      "unit": "kg",
+      "available": true
+    },
+    "بصل": {
+      "price_per_unit": 2.0,
+      "unit": "kg",
+      "available": true,
+      "yesterday_price": 3.5,
+      "updated_at": "2026-04-17T21:14:51.901417+00:00"
+    },
+    "دجاج": {
+      "price_per_unit": 45.0,
+      "unit": "قطعة",
+      "available": true
+    },
+    "جزر": {
+      "price_per_unit": 6.0,
+      "unit": "kg",
+      "available": true,
+      "yesterday_price": 4.0,
+      "updated_at": "2026-04-17T21:14:52.038286+00:00"
+    },
+    "كوسة": {
+      "price_per_unit": 3.0,
+      "unit": "kg",
+      "available": true,
+      "yesterday_price": 6.0,
+      "updated_at": "2026-04-17T21:14:52.075278+00:00"
+    },
+    "فلفل أخضر": {
+      "price_per_unit": 9.0,
+      "unit": "kg",
+      "available": false,
+      "yesterday_price": 8.0,
+      "updated_at": "2026-04-17T21:14:52.147821+00:00"
+    },
+    "صدر الدجاج": {
+      "price_per_unit": 65.0,
+      "unit": "kg",
+      "available": true,
+      "yesterday_price": 32.0,
+      "updated_at": "2026-04-17T21:14:52.289147+00:00"
+    },
+    "بيض بلدي": {
+      "price_per_unit": 12.0,
+      "unit": "بيضة",
+      "available": true
+    },
+    "موز": {
+      "price_per_unit": 6.0,
+      "unit": "kg",
+      "available": true,
+      "yesterday_price": 8.0,
+      "updated_at": "2026-04-17T21:14:52.324704+00:00"
+    },
+    "تفاح": {
+      "price_per_unit": 90.0,
+      "unit": "kg",
+      "available": true,
+      "yesterday_price": 7.0,
+      "updated_at": "2026-04-17T21:14:52.383704+00:00"
+    },
+    "برتقال": {
+      "price_per_unit": 33.0,
+      "unit": "kg",
+      "available": true,
+      "yesterday_price": 6.0,
+      "updated_at": "2026-04-17T21:14:52.449590+00:00"
+    },
+    "رمان": {
+      "price_per_unit": 132.0,
+      "unit": "kg",
+      "available": false,
+      "yesterday_price": 10.0,
+      "updated_at": "2026-04-17T21:14:52.486593+00:00"
+    },
+    "كزبرة": {
+      "price_per_unit": 3.0,
+      "unit": "ضمة",
+      "available": true,
+      "yesterday_price": 2.0,
+      "updated_at": "2026-04-17T21:14:52.522123+00:00"
+    }
+  }
+}
