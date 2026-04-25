@@ -64,15 +64,23 @@ _TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN", "")
 # ---------------------------------------------------------------------------
 # CORS
 # ---------------------------------------------------------------------------
-ALLOWED_ORIGINS = [
-    "http://localhost:5173", "http://localhost:5174", "http://localhost:5175",
-    "http://127.0.0.1:5173", "http://127.0.0.1:5174", "http://127.0.0.1:5175",
-    "http://localhost:5500",  "http://127.0.0.1:5500",
-    "http://localhost:5501",  "http://127.0.0.1:5501",
-    "http://localhost:3000",  "http://127.0.0.1:3000",
-    "http://localhost:8080",  "http://127.0.0.1:8080",
-    "null",
-]
+import os as _os
+_ENV = _os.getenv("APP_ENV", "development")
+
+# Development: allow localhost. Production: only real domains.
+if _ENV == "production":
+    ALLOWED_ORIGINS = [
+        "https://mygreengoo.com",
+        "https://www.mygreengoo.com",
+        "https://greengo-frontend.up.railway.app",
+    ]
+else:
+    ALLOWED_ORIGINS = [
+        "http://localhost:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:5174",
+    ]
 
 # ---------------------------------------------------------------------------
 # Inline Pydantic models
@@ -485,9 +493,76 @@ app.add_middleware(
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["*"],
-    expose_headers=["*"],
+    allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
+    expose_headers=["Content-Disposition"],
 )
+
+# ── Security headers middleware ───────────────────────────────────────────────
+from starlette.middleware.base import BaseHTTPMiddleware as _BaseMiddleware
+from collections import defaultdict as _defaultdict
+import time as _time
+
+class SecurityHeadersMiddleware(_BaseMiddleware):
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"]    = "nosniff"
+        response.headers["X-Frame-Options"]           = "DENY"
+        response.headers["X-XSS-Protection"]          = "1; mode=block"
+        response.headers["Referrer-Policy"]           = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"]        = "geolocation=(), microphone=(), camera=()"
+        if _os.getenv("APP_ENV") == "production":
+            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        return response
+
+# ── Rate limiting middleware ──────────────────────────────────────────────────
+_RATE_LIMITS: dict[str, list[float]] = _defaultdict(list)
+_RATE_WINDOW  = 60      # seconds
+_RATE_MAX_REQ = 60      # requests per window per IP (general)
+_RATE_MAX_ORD = 10      # stricter limit for POST /orders
+
+class RateLimitMiddleware(_BaseMiddleware):
+    async def dispatch(self, request, call_next):
+        ip  = request.client.host if request.client else "unknown"
+        now = _time.time()
+        path = request.url.path
+
+        # Choose limit
+        limit = _RATE_MAX_ORD if (
+            path.startswith("/api/v1/orders") and request.method == "POST"
+        ) else _RATE_MAX_REQ
+
+        key = f"{ip}:{path if limit == _RATE_MAX_ORD else 'global'}"
+        _RATE_LIMITS[key] = [t for t in _RATE_LIMITS[key] if now - t < _RATE_WINDOW]
+
+        if len(_RATE_LIMITS[key]) >= limit:
+            from fastapi.responses import JSONResponse as _JR
+            return _JR(
+                status_code=429,
+                content={"detail": "Too many requests. Please slow down."},
+                headers={"Retry-After": "60"},
+            )
+
+        _RATE_LIMITS[key].append(now)
+        return await call_next(request)
+
+# ── Payload size limit middleware ─────────────────────────────────────────────
+_MAX_BODY_BYTES = 512 * 1024  # 512 KB
+
+class MaxBodySizeMiddleware(_BaseMiddleware):
+    async def dispatch(self, request, call_next):
+        if request.method in ("POST", "PUT", "PATCH"):
+            cl = request.headers.get("content-length")
+            if cl and int(cl) > _MAX_BODY_BYTES:
+                from fastapi.responses import JSONResponse as _JR
+                return _JR(
+                    status_code=413,
+                    content={"detail": "Payload too large. Maximum 512 KB."},
+                )
+        return await call_next(request)
+
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(RateLimitMiddleware)
+app.add_middleware(MaxBodySizeMiddleware)
 
 app.include_router(products_router)
 app.include_router(orders_router)
@@ -619,21 +694,6 @@ async def get_admin_orders(
     return results
 
 
-@app.patch("/api/v1/orders/{order_id}/status", tags=["Orders"])
-async def update_order_status(
-    order_id: str,
-    payload:  UpdateOrderStatusRequest,
-) -> dict:
-    return await _do_update_order_status(order_id, payload.status)
-
-
-@app.patch("/api/v1/orders/{order_id}", tags=["Orders"])
-async def update_order_status_alias(
-    order_id: str,
-    payload:  UpdateOrderStatusRequest,
-) -> dict:
-    return await _do_update_order_status(order_id, payload.status)
-
 
 @app.options("/api/v1/orders/{order_id}/invoice", tags=["Orders"])
 async def invoice_preflight(order_id: str):
@@ -655,17 +715,23 @@ async def download_invoice(order_id: str):
     from fastapi.responses import StreamingResponse
     from app.services.pdf_generator import generate_invoice_pdf
 
-    col = whatsapp_orders_col()
+    from bson import ObjectId
 
-    # Try ObjectId first, fall back to plain string _id
+    # Search orders_col first (website orders), then whatsapp_orders_col (legacy)
     doc = None
-    try:
-        from bson import ObjectId
-        doc = await col.find_one({"_id": ObjectId(order_id)})
-    except Exception:
-        pass
-    if doc is None:
-        doc = await col.find_one({"_id": order_id})
+    for get_col in [orders_col, whatsapp_orders_col]:
+        col = get_col()
+        try:
+            doc = await col.find_one({"_id": ObjectId(order_id)})
+        except Exception:
+            pass
+        if doc is None:
+            try:
+                doc = await col.find_one({"_id": order_id})
+            except Exception:
+                pass
+        if doc is not None:
+            break
     if doc is None:
         raise HTTPException(
             status_code=404,

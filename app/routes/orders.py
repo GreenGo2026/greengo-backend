@@ -32,7 +32,7 @@ class CreateOrderPayload(BaseModel):
     customer_name: str
     phone: str = Field(validation_alias=AliasChoices("phone", "customer_phone"))
     customer_phone: str | None = None
-    address: str
+    address: str = Field(validation_alias=AliasChoices("address", "delivery_address"))
     gps_coordinates: GPSCoordinates | None = None
     items: list[OrderItem]
     total_price: float
@@ -168,11 +168,20 @@ async def update_order_status(
     order_id: str,
     status:   str,
 ) -> dict[str, Any]:
-    allowed = {"Pending", "Preparing", "Out for Delivery", "Delivered", "Cancelled", "Completed"}
-    if status.lower() not in [s.lower() for s in allowed]:
-        raise HTTPException(status_code=400, detail=f"status must be one of {allowed}")
-
-    final_status = next(s for s in allowed if s.lower() == status.lower())
+    # Normalize: accept both "out_for_delivery" and "Out for Delivery"
+    status_map = {
+        "pending":          "Pending",
+        "preparing":        "Preparing",
+        "out_for_delivery": "Out for Delivery",
+        "out for delivery": "Out for Delivery",
+        "delivered":        "Delivered",
+        "cancelled":        "Cancelled",
+        "canceled":         "Cancelled",
+        "completed":        "Completed",
+    }
+    final_status = status_map.get(status.lower().strip())
+    if not final_status:
+        raise HTTPException(status_code=400, detail=f"Invalid status: {status}. Must be one of: {list(status_map.keys())}")
 
     col   = orders_col()
     order = await col.find_one({"_id": ObjectId(order_id)})
@@ -204,17 +213,32 @@ async def update_order_status(
 @router.get("/{order_id}/invoice", summary="Download PDF invoice for an order")
 async def download_invoice(order_id: str):
     from app.database import whatsapp_orders_col
-    col = whatsapp_orders_col()
 
     doc = None
+
+    # 1. Search orders_col first (new orders from website)
     try:
+        col = orders_col()
         doc = await col.find_one({"_id": ObjectId(order_id)})
     except Exception:
         pass
+
+    # 2. Fall back to whatsapp_orders_col (legacy WhatsApp orders)
     if doc is None:
-        doc = await col.find_one({"_id": order_id})
+        try:
+            wa_col = whatsapp_orders_col()
+            doc = await wa_col.find_one({"_id": ObjectId(order_id)})
+        except Exception:
+            pass
+        if doc is None:
+            try:
+                wa_col = whatsapp_orders_col()
+                doc = await wa_col.find_one({"_id": order_id})
+            except Exception:
+                pass
+
     if doc is None:
-        raise HTTPException(status_code=404, detail=f"Order {order_id} not found in whatsapp_orders.")
+        raise HTTPException(status_code=404, detail=f"Order {order_id} not found.")
 
     doc["_id"] = str(doc["_id"])
     if isinstance(doc.get("created_at"), datetime):

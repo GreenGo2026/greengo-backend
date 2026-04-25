@@ -154,7 +154,7 @@ function LangToggle({lang,setLang}:{lang:Lang;setLang:(l:Lang)=>void}){
 }
 
 function SBadge({status,lang}:{status:OrderStatus;lang:Lang}){
-  const c=sCfg(lang)[status];
+  const c=sCfg(lang)[status?.toLowerCase() as OrderStatus]||sCfg(lang)["pending"];
   return(<span className={"inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold ring-1 "+c.color+" "+c.bg+" "+c.ring}><span className="h-1.5 w-1.5 rounded-full" style={{background:c.dot}}/>{c.label}</span>);
 }
 
@@ -162,13 +162,13 @@ function Timeline({status,lang}:{status:OrderStatus;lang:Lang}){
   const L=I[lang];
   const steps=[{label:L.tl_ordered,icon:<ShoppingBag size={11}/>},{label:L.tl_approved,icon:<CheckSquare size={11}/>},{label:L.tl_delivery,icon:<Bike size={11}/>},{label:L.tl_done,icon:<CheckCircle size={11}/>}];
   const rank:Record<string,number>={pending:0,preparing:1,out_for_delivery:2,delivered:3,completed:3,cancelled:-1};
-  const cur=rank[status]??0;
+  const cur=rank[status?.toLowerCase()]??0;
   return(<div className="flex items-start gap-0 w-full">{steps.map((step,i)=>{const done=cur>i;const active=cur===i&&status!=="cancelled";return(<div key={i} className="flex flex-1 items-center"><div className="flex flex-col items-center gap-1 min-w-0"><div className={"flex h-7 w-7 items-center justify-center rounded-full transition-all "+(done?"bg-[#2E8B57] text-white":active?"bg-amber-400 text-white animate-pulse":"bg-gray-100 text-gray-400")}>{step.icon}</div><span className={"text-[9px] font-semibold text-center px-0.5 "+(done?"text-[#2E8B57]":active?"text-amber-600":"text-gray-400")}>{step.label}</span></div>{i<steps.length-1&&<div className={"flex-1 h-0.5 mx-1 mb-4 rounded-full "+(done?"bg-[#2E8B57]":active?"bg-amber-200":"bg-gray-100")}/>}</div>);})}</div>);
 }
 
 function OrderCard({order,lang,isOldest,onStatusChange,showToast,onRefresh}:{order:Order;lang:Lang;isOldest:boolean;onStatusChange:(id:string,s:OrderStatus)=>Promise<void>;showToast:(msg:string,type:ToastState["type"])=>void;onRefresh:()=>void;}){
   const [expanded,setExpanded]=useState(order.status==="pending"||order.status==="out_for_delivery");
-  const [localStatus,setLocal]=useState<OrderStatus>(order.status as OrderStatus);
+  const [localStatus,setLocal]=useState<OrderStatus>((order.status?.toLowerCase() as OrderStatus)||"pending");
   const [loading,setLoading]=useState<OrderStatus|null>(null);
   const L=I[lang];const dir=lang==="ar"?"rtl":"ltr";const font=lang==="ar"?"font-arabic":"font-latin";
   const ago=minutesAgo(order.created_at);
@@ -355,7 +355,7 @@ export default function AdminPage() {
       </div>
       <div className="mx-auto max-w-6xl px-4 py-6 space-y-6">
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          {[{icon:ShoppingBag,label:L.total_orders,value:String(orders.length),from:"#2E8B57",to:"#1a6b42"},{icon:Clock,label:L.pending_lbl,value:String(pendingCount),from:"#F59E0B",to:"#d97706"},{icon:Package,label:L.products_lbl,value:String(products.length),from:"#C0614A",to:"#a04a36"},{icon:TrendingUp,label:L.unsaved_lbl,value:String(dirtyCount),from:"#C9A96E",to:"#a07d42"}].map((s,i)=>{const Icon=s.icon;return(<div key={i} className="flex items-center gap-3 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5"><div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-white shadow-md" style={{background:"linear-gradient(135deg,"+s.from+","+s.to+")"}}><Icon size={18}/></div><div className={lang==="ar"?"text-right":""}><p className="text-2xl font-extrabold text-gray-800">{s.value}</p><p className="text-[11px] text-gray-400">{s.label}</p></div></div>);})}
+          {[{icon:ShoppingBag,label:L.total_orders,value:String(orders.length),from:"#2E8B57",to:"#1a6b42",id:"orders"},{icon:Clock,label:L.pending_lbl,value:String(pendingCount),from:"#F59E0B",to:"#d97706",id:"pending"},{icon:Package,label:L.products_lbl,value:String(products.length),from:"#C0614A",to:"#a04a36",id:"products"},{icon:TrendingUp,label:L.unsaved_lbl,value:String(dirtyCount),from:"#C9A96E",to:"#a07d42",id:"unsaved"}].map((s,i)=>{const Icon=s.icon;return(<div key={s.id} className="flex items-center gap-3 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5"><div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-white shadow-md" style={{background:"linear-gradient(135deg,"+s.from+","+s.to+")"}}><Icon size={18}/></div><div className={lang==="ar"?"text-right":""}><p className="text-2xl font-extrabold text-gray-800">{s.value}</p><p className="text-[11px] text-gray-400">{s.label}</p></div></div>);})}
         </div>
         {activeTab==="orders"&&(
           <div className="space-y-4">

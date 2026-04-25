@@ -180,9 +180,13 @@ export async function getOrders(status?: OrderStatus, limit = 50): Promise<Order
   const params: Record<string, string | number> = { limit };
   if (status) params.status = status;
   const r = await apiClient.get<unknown>("/orders", { params });
-  return toArray<Order>(r.data);
+  return toArray<Order>(r.data).map((o: Order) => ({
+    ...o,
+    id: o.id || (o as unknown as Record<string,string>)["_id"] || "",
+    status: (o.status?.toLowerCase() as OrderStatus) || "pending",
+  }));
 }
 export async function updateOrderStatus(orderId: string, status: OrderStatus): Promise<OrderStatusUpdateResponse> {
-  const r = await apiClient.patch<OrderStatusUpdateResponse>(`/orders/${orderId}/status`, { status });
+  const r = await apiClient.patch<OrderStatusUpdateResponse>(`/orders/${orderId}/status`, null, { params: { status } });
   return r.data;
 }

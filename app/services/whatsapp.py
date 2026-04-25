@@ -1,56 +1,88 @@
-﻿import os
-import requests
+import os
 import json
+import logging
+import requests
 from dotenv import load_dotenv
 
-# تحميل الإعدادات
 load_dotenv()
 
-GREEN_API_URL = os.getenv('GREEN_API_URL')
-GREEN_API_ID_INSTANCE = os.getenv('GREEN_API_ID_INSTANCE')
-GREEN_API_TOKEN_INSTANCE = os.getenv('GREEN_API_TOKEN_INSTANCE')
+logger = logging.getLogger(__name__)
+
+GREEN_API_URL             = os.getenv("GREEN_API_URL")
+GREEN_API_ID_INSTANCE     = os.getenv("GREEN_API_ID_INSTANCE")
+GREEN_API_TOKEN_INSTANCE  = os.getenv("GREEN_API_TOKEN_INSTANCE")
+
+# Quota / transient error strings — treated as warnings, not errors
+_QUOTA_STRINGS = (
+    "quota",
+    "exceeded",
+    "limit",
+    "rate",
+    "too many",
+    "unauthorized",
+    "blocked",
+)
 
 def format_moroccan_number(phone: str) -> str:
-    '''تحويل الرقم المغربي العادي إلى صيغة GREEN-API'''
-    # تنظيف الرقم من الفراغات والرموز
-    clean_phone = ''.join(filter(str.isdigit, phone))
-    
-    # إذا كان يبدأ بـ 0، احذفه وضع 212
-    if clean_phone.startswith('0'):
-        clean_phone = '212' + clean_phone[1:]
-    # إذا لم يكن يبدأ بـ 212، أضفها (احتياطاً)
-    elif not clean_phone.startswith('212'):
-        clean_phone = '212' + clean_phone
-        
-    return f"{clean_phone}@c.us"
+    """Convert Moroccan phone number to GREEN-API chatId format."""
+    clean = "".join(filter(str.isdigit, phone))
+    if clean.startswith("0"):
+        clean = "212" + clean[1:]
+    elif not clean.startswith("212"):
+        clean = "212" + clean
+    return f"{clean}@c.us"
 
 def send_whatsapp_message(phone: str, message: str) -> bool:
-    '''إرسال رسالة واتساب للزبون'''
-    if not GREEN_API_URL or not GREEN_API_ID_INSTANCE:
-        print("⚠️ إعدادات GREEN-API غير موجودة في .env")
+    """
+    Send a WhatsApp message via Green-API.
+    Never raises — always returns bool.
+    Quota / API errors are logged as WARNING so the server continues normally.
+    """
+    if not GREEN_API_URL or not GREEN_API_ID_INSTANCE or not GREEN_API_TOKEN_INSTANCE:
+        logger.warning("[WhatsApp] GREEN-API credentials missing in .env — skipping.")
         return False
 
-    api_endpoint = f"{GREEN_API_URL}/waInstance{GREEN_API_ID_INSTANCE}/sendMessage/{GREEN_API_TOKEN_INSTANCE}"
+    endpoint = (
+        f"{GREEN_API_URL}/waInstance{GREEN_API_ID_INSTANCE}"
+        f"/sendMessage/{GREEN_API_TOKEN_INSTANCE}"
+    )
     chat_id = format_moroccan_number(phone)
-    
-    payload = {
-        "chatId": chat_id,
-        "message": message
-    }
-    
+    payload = {"chatId": chat_id, "message": message}
+
     try:
-        response = requests.post(
-            api_endpoint,
-            headers={'Content-Type': 'application/json'},
-            data=json.dumps(payload, ensure_ascii=False).encode('utf-8'),
-            timeout=10
+        resp = requests.post(
+            endpoint,
+            headers={"Content-Type": "application/json"},
+            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            timeout=10,
         )
-        if response.status_code == 200:
-            print(f"✅ تم إرسال الواتساب بنجاح إلى {phone}")
+
+        if resp.status_code == 200:
+            logger.info("[WhatsApp] Message sent to %s", phone)
             return True
+
+        # Detect quota / rate-limit responses
+        body_lower = resp.text.lower()
+        is_quota   = any(q in body_lower for q in _QUOTA_STRINGS)
+
+        if is_quota:
+            logger.warning(
+                "[WhatsApp] Quota/limit reached — message NOT sent to %s. "
+                "Response: %s", phone, resp.text[:120]
+            )
         else:
-            print(f"❌ فشل إرسال الواتساب: {response.text}")
-            return False
-    except Exception as e:
-        print(f"❌ خطأ في الاتصال بـ WhatsApp API: {str(e)}")
+            logger.warning(
+                "[WhatsApp] Send failed (HTTP %s) to %s. Response: %s",
+                resp.status_code, phone, resp.text[:120]
+            )
+        return False
+
+    except requests.exceptions.Timeout:
+        logger.warning("[WhatsApp] Request timed out for %s — skipping.", phone)
+        return False
+    except requests.exceptions.ConnectionError:
+        logger.warning("[WhatsApp] Connection error for %s — skipping.", phone)
+        return False
+    except Exception as exc:                          # noqa: BLE001
+        logger.warning("[WhatsApp] Unexpected error for %s: %s", phone, exc)
         return False
