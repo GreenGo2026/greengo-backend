@@ -42,6 +42,7 @@ from app.config import get_settings
 from app.database import close_db, connect_db, orders_col, products_col, whatsapp_orders_col
 from app.routes.products import router as products_router
 from app.routes.orders   import router as orders_router
+from app.routes.webhook  import router as webhook_router
 from app.routes.storefront import router as storefront_router
 from app.routes.analytics import router as analytics_router
 
@@ -566,6 +567,7 @@ app.add_middleware(MaxBodySizeMiddleware)
 
 app.include_router(products_router)
 app.include_router(orders_router)
+app.include_router(webhook_router)
 app.include_router(storefront_router)
 app.include_router(analytics_router)
 
