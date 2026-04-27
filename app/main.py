@@ -74,6 +74,7 @@ if _ENV == "production":
         "https://mygreengoo.com",
         "https://www.mygreengoo.com",
         "https://greengo-frontend.up.railway.app",
+        "https://greengo-frontend.vercel.app",
     ]
 else:
     ALLOWED_ORIGINS = [
