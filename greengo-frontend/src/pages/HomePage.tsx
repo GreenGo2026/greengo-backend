@@ -22,6 +22,14 @@ interface NicheCategory {
   db_match: string[];
 }
 
+// Resolve image URL — prepend API base for relative /static/ paths
+const _API = (import.meta.env.VITE_API_URL || "http://127.0.0.1:8000").replace(/\/+$/, "");
+function resolveImg(url: string | null | undefined): string {
+  if (!url) return "";
+  if (url.startsWith("http")) return url;          // already absolute
+  return _API + url;                               // prepend backend base
+}
+
 const NICHE_CATS: NicheCategory[] = [
   {
     key: "all",
@@ -247,7 +255,7 @@ function ProductGalleryModal({
                 onMouseMove={mg.onMove}>
                 <img
                   ref={mg.imgRef}
-                  src={product.image_url}
+                  src={resolveImg(product.image_url)}
                   alt={product.name_fr || "product"}
                   className="absolute inset-0 w-full h-full object-contain select-none pointer-events-none"
                   style={{ padding: "9%", filter: "drop-shadow(0 8px 20px rgba(0,0,0,0.10))" }}
@@ -276,7 +284,7 @@ function ProductGalleryModal({
                       style={{ width: 220, height: 220 }}>
                       <div style={{
                         width: "100%", height: "100%",
-                        backgroundImage: `url(${product.image_url})`,
+                        backgroundImage: `url(${resolveImg(product.image_url)})`,
                         backgroundRepeat: "no-repeat",
                         backgroundSize: `${bw}px ${bh}px`,
                         backgroundPosition: `${bx}px ${by}px`,
@@ -302,7 +310,7 @@ function ProductGalleryModal({
                 style={{ height: "52vw", minHeight: "200px" }}
                 onClick={() => setZoomed(true)}>
                 <img
-                  src={product.image_url}
+                  src={resolveImg(product.image_url)}
                   alt={product.name_fr || "product"}
                   className="h-full w-full object-contain select-none"
                   style={{ padding: "8%", filter: "drop-shadow(0 6px 12px rgba(0,0,0,0.10))" }}
@@ -400,7 +408,7 @@ function ProductGalleryModal({
           style={{ background: "rgba(0,0,0,0.96)", zIndex: 60 }}
           onClick={() => setZoomed(false)}>
           <img
-            src={product.image_url}
+            src={resolveImg(product.image_url)}
             alt={product.name_fr || "product"}
             className="max-h-[88vh] max-w-[92vw] object-contain select-none"
             style={{ cursor: "zoom-out" }}
@@ -447,7 +455,7 @@ function ProductCard({ product, rank }: { product: DBProduct; rank: number }) {
           <div className="absolute inset-0 bg-gradient-to-t from-black/6 via-transparent to-transparent pointer-events-none z-10" />
           {product.image_url && !imgError ? (
             <img
-              src={product.image_url}
+              src={resolveImg(product.image_url)}
               alt={product.name_fr || product.name_ar || "product"}
               className="absolute inset-0 h-full w-full object-contain transition-transform duration-500 group-hover:scale-[1.07] select-none pointer-events-none"
               style={{ padding: "10%", filter: "drop-shadow(0 4px 10px rgba(0,0,0,0.09))" }}

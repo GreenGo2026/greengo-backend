@@ -14,7 +14,7 @@ import HomePage                   from "./pages/HomePage";
 import CartPage                   from "./pages/CartPage";
 import AdminPage                  from "./pages/AdminPage";
 import AdminOrders                from "./pages/Admin/AdminOrders";
-import POSPage                    from "./pages/admin/POSPage";
+import POSPage                    from "./pages/Admin/POSPage";
 import SuperAdminPage             from "./pages/SuperAdminPage";
 import AboutPage                  from "./pages/AboutPage";
 import ContactPage                from "./pages/ContactPage";

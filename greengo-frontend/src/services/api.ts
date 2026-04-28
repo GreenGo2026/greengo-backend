@@ -1,8 +1,10 @@
 // src/services/api.ts
 import axios from "axios";
 
+const _rawBase = (import.meta.env.VITE_API_URL || "http://127.0.0.1:8000").replace(/\/+$/, "");
+
 export const apiClient = axios.create({
-  baseURL: `${import.meta.env.VITE_API_URL || "http://127.0.0.1:8000"}/api/v1`,
+  baseURL: `${_rawBase}/api/v1`,
   headers: { "Content-Type": "application/json" },
   timeout: 10_000,
 });
