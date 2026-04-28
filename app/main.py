@@ -485,6 +485,10 @@ app = FastAPI(
 
 # ── Static files — absolute path ────────────────────────────────────────────
 _ASSETS_DIR = Path(__file__).resolve().parent.parent / 'assets'
+if not _ASSETS_DIR.exists():
+    _ASSETS_DIR = Path('/app/assets')
+if not _ASSETS_DIR.exists():
+    _ASSETS_DIR = Path(__file__).resolve().parent / 'assets'
 app.mount('/static', StaticFiles(directory=str(_ASSETS_DIR)), name='static')
 
 app.add_middleware(
