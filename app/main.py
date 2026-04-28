@@ -835,7 +835,6 @@ async def whatsapp_webhook(
     twiml = MessagingResponse()
     twiml.message(reply)
     return Response(content=str(twiml), media_type="application/xml")
-    )
     total   = await col.count_documents({})
     visible = await col.count_documents({"visible": True})
     with_img = await col.count_documents({"image_url": {"$nin": ["", None]}})
