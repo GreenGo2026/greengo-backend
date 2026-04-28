@@ -835,14 +835,6 @@ async def whatsapp_webhook(
     twiml = MessagingResponse()
     twiml.message(reply)
     return Response(content=str(twiml), media_type="application/xml")
-
-# ── ONE-TIME FIX ENDPOINT — remove after use ─────────────────────────────────
-@app.post("/api/v1/admin/fix-visibility", tags=["Admin"])
-async def fix_product_visibility():
-    col = products_col()
-    result = await col.update_many(
-        {"visible": {"$ne": True}},
-        {"$set": {"visible": True, "in_stock": True, "image_status": "ready"}}
     )
     total   = await col.count_documents({})
     visible = await col.count_documents({"visible": True})
