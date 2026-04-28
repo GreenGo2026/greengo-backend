@@ -69,20 +69,17 @@ import os as _os
 _ENV = _os.getenv("APP_ENV", "development")
 
 # Development: allow localhost. Production: only real domains.
-if _ENV == "production":
-    ALLOWED_ORIGINS = [
-        "https://mygreengoo.com",
-        "https://www.mygreengoo.com",
-        "https://greengo-frontend.up.railway.app",
-        "https://greengo-frontend.vercel.app",
-    ]
-else:
-    ALLOWED_ORIGINS = [
-        "http://localhost:5173",
-        "http://localhost:5174",
-        "http://127.0.0.1:5173",
-        "http://127.0.0.1:5174",
-    ]
+# Always include production domains + localhost for dev
+ALLOWED_ORIGINS = [
+    "https://mygreengoo.com",
+    "https://www.mygreengoo.com",
+    "https://greengo-frontend.vercel.app",
+    "https://greengo-frontend.up.railway.app",
+    "http://localhost:5173",
+    "http://localhost:5174",
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:5174",
+]
 
 # ---------------------------------------------------------------------------
 # Inline Pydantic models
