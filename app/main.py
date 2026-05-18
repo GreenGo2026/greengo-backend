@@ -849,7 +849,6 @@ async def whatsapp_webhook(
         "with_image": with_img,
     }
 
-    )
     total   = await col.count_documents({})
     visible = await col.count_documents({"visible": True})
     with_img = await col.count_documents({"image_url": {"$nin": ["", None]}})
