@@ -770,6 +770,81 @@ async def download_invoice(order_id: str):
     )
 
 
+
+
+# ---------------------------------------------------------------------------
+# Sitemap
+# ---------------------------------------------------------------------------
+@app.get("/sitemap.xml", include_in_schema=False)
+async def sitemap():
+    from fastapi.responses import Response as XmlResponse
+    base = "https://www.mygreengoo.com"
+
+    # Static pages
+    static_pages = [
+        ("",          "daily",  "1.0"),
+        ("/shop",     "daily",  "0.9"),
+        ("/offres",   "daily",  "0.9"),
+        ("/about",    "monthly","0.7"),
+        ("/contact",  "monthly","0.6"),
+        ("/fidelite", "monthly","0.6"),
+        ("/faq",      "monthly","0.5"),
+        ("/livraison","monthly","0.5"),
+        ("/recrutement","monthly","0.4"),
+        ("/legal/cgu",    "yearly","0.3"),
+        ("/legal/privacy","yearly","0.3"),
+        ("/legal/terms",  "yearly","0.3"),
+        ("/legal/info",   "yearly","0.3"),
+    ]
+
+    # Dynamic product pages
+    try:
+        col  = products_col()
+        docs = await col.find(
+            {"visible": True, "in_stock": True},
+            {"_id": 1, "name_fr": 1, "updated_at": 1}
+        ).to_list(length=500)
+    except Exception:
+        docs = []
+
+    from datetime import datetime, timezone
+    now = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d")
+
+    urls = []
+
+    # Static
+    for path_str, freq, priority in static_pages:
+        urls.append(f"""  <url>
+    <loc>{base}{path_str}</loc>
+    <changefreq>{freq}</changefreq>
+    <priority>{priority}</priority>
+    <lastmod>{now}</lastmod>
+  </url>""")
+
+    # Products
+    for doc in docs:
+        pid      = str(doc["_id"])
+        updated  = doc.get("updated_at")
+        lastmod  = updated.strftime("%Y-%m-%d") if hasattr(updated, "strftime") else now
+        name     = (doc.get("name_fr") or "").replace("&","&amp;").replace("<","&lt;")
+        urls.append(f"""  <url>
+    <loc>{base}/produit/{pid}</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+    <lastmod>{lastmod}</lastmod>
+  </url>""")
+
+    xml = """<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+""" + "\n".join(urls) + """
+</urlset>"""
+
+    return XmlResponse(
+        content=xml,
+        media_type="application/xml",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
+
 # ---------------------------------------------------------------------------
 # Legacy routes
 # ---------------------------------------------------------------------------
