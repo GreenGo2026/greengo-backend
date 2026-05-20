@@ -10,7 +10,7 @@ import { useLanguage } from "../../contexts/LanguageContext";
 // ── Contact constants ─────────────────────────────────────────────────────────
 const WA_SUPPORT  = "https://wa.me/212664397031";
 const WA_ORDERS   = "https://wa.me/212664500789";
-const EMAIL       = "CONTACT@MYGRENGO.COM";
+const EMAIL       = "team@mygreengoo.com";
 const PHONE_LABEL = "+212 664-500-789";
 const PHONE_HREF  = "tel:+212664500789";
 const REL         = "noopener noreferrer";
@@ -69,18 +69,18 @@ function ColLink({ href, children, external = false }: {
   children: React.ReactNode;
   external?: boolean;
 }) {
-  const cls = "group flex items-center gap-2 text-sm text-white/50 transition-all duration-200 hover:text-white hover:translate-x-0.5";
+  const cls = "group flex items-center gap-2 text-[13px] text-white/45 transition-all duration-200 hover:text-white/90";
   if (external) {
     return (
       <a href={href} target="_blank" rel={REL} className={cls}>
-        <ChevronRight size={11} className="shrink-0 text-[#2E8B57]/60 transition-transform group-hover:translate-x-0.5" />
+        <ChevronRight size={10} className="shrink-0 text-amber-600/50 transition-transform group-hover:translate-x-1" />
         {children}
       </a>
     );
   }
   return (
     <Link to={href} className={cls}>
-      <ChevronRight size={11} className="shrink-0 text-[#2E8B57]/60 transition-transform group-hover:translate-x-0.5" />
+      <ChevronRight size={10} className="shrink-0 text-amber-600/50 transition-transform group-hover:translate-x-1" />
       {children}
     </Link>
   );
@@ -136,7 +136,7 @@ function Newsletter() {
           }
         </button>
       </form>
-      <p className={"text-[10px] text-white/20 " + font}>{t("newsletter_trust")}</p>
+      <p className={"text-[10px] text-white/55 " + font}>{t("newsletter_trust")}</p>
     </div>
   );
 }
@@ -149,17 +149,38 @@ export default function Footer() {
   const row   = isRTL ? "flex-row-reverse" : "";
   const year  = new Date().getFullYear();
 
-  const headingCls = "mb-5 text-[10px] font-black uppercase tracking-[0.18em] text-white/35";
+  const headingCls = "mb-4 text-[9px] font-black uppercase tracking-[0.22em] text-white/45 pb-2 border-b border-white/[0.06]";
 
   return (
-    <footer className={"w-full " + font} style={{ background: "#0b1120" }}>
+    <footer className={"w-full " + font} style={{ background: "linear-gradient(180deg, #0a1a12 0%, #070f0a 100%)" }}>
 
       {/* Zellige accent top border */}
       <div className="zellige-border" />
 
+      {/* ── Trust strip ── */}
+      <div className="mx-auto max-w-7xl px-5 pt-10 pb-0">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-10">
+          {[
+            { emoji: "🌿", fr: "Frais chaque matin",      ar: "طازج كل صباح"       },
+            { emoji: "🛵", fr: "Livraison 2h",             ar: "توصيل خلال ساعتين"  },
+            { emoji: "✅", fr: "Qualité garantie",         ar: "جودة مضمونة"        },
+            { emoji: "💬", fr: "Support WhatsApp",         ar: "دعم عبر واتساب"     },
+          ].map((item) => (
+            <div key={item.fr}
+              className={"flex items-center gap-2.5 rounded-xl p-3 " + font}
+              style={{ background: "rgba(46,139,87,0.07)", border: "1px solid rgba(46,139,87,0.15)" }}>
+              <span className="text-xl shrink-0">{item.emoji}</span>
+              <span className="text-xs font-semibold text-white/60 leading-tight">
+                {language === "ar" ? item.ar : item.fr}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* ── Main grid ── */}
-      <div className="mx-auto max-w-7xl px-5 py-14 md:py-16">
-        <div dir={dir} className="grid grid-cols-1 gap-10 sm:grid-cols-2 lg:grid-cols-12">
+      <div className="mx-auto max-w-7xl px-5 pb-14 md:pb-16">
+        <div dir={dir} className="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-12">
 
           {/* ── Brand column (wider) ──────────────────────── lg:col-span-3 */}
           <div className={"space-y-5 lg:col-span-3 " + align}>
@@ -196,7 +217,7 @@ export default function Footer() {
             </Link>
 
             {/* Tagline */}
-            <p className={"text-sm leading-relaxed text-white/50 max-w-xs " + (isRTL ? "mr-0 ml-auto md:ml-0" : "")}>
+            <p className={"text-sm leading-relaxed text-white/55 max-w-xs " + (isRTL ? "mr-0 ml-auto md:ml-0" : "")}>
               {language === "ar"
                 ? "بقالتك الإلكترونية الأولى في المغرب — خضرة وفواكه ودجاج طازج، نوصلها لباب الدار."
                 : language === "fr"
@@ -211,7 +232,7 @@ export default function Footer() {
                 <p className="text-xs font-semibold text-white/60 font-latin leading-snug">
                   Lot N° 145 Lotissement EL MOUSTAKBAL
                 </p>
-                <p className="text-xs text-white/38 font-latin">Laayayda, Salé — Maroc</p>
+                <p className="text-xs text-white/52 font-latin">Laayayda, Salé — Maroc</p>
                 <p className="mt-1 text-[11px] font-medium text-white/45 font-arabic" dir="rtl">
                   تجزئة المستقبل، لعيايدة، سلا
                 </p>
@@ -220,14 +241,14 @@ export default function Footer() {
 
             {/* Social icons */}
             <div>
-              <p className={"mb-3 text-[10px] font-bold uppercase tracking-widest text-white/25 " + font}>
+              <p className={"mb-3 text-[10px] font-bold uppercase tracking-widest text-white/42 " + font}>
                 {language === "ar" ? "تابعنا" : "Suivez-nous"}
               </p>
               <div className={"flex items-center gap-2 " + (isRTL ? "flex-row-reverse" : "")}>
                 {SOCIALS.map((s) => (
                   <a key={s.name} href={s.href} target="_blank" rel={REL}
                     title={s.name}
-                    className={"flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-white/40 transition-all duration-200 " + s.hoverColor + " " + s.hoverBg}>
+                    className={"flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/[0.06] text-white/50 transition-all duration-200 hover:scale-105 " + s.hoverColor + " " + s.hoverBg}>
                     {s.icon}
                   </a>
                 ))}
@@ -287,7 +308,7 @@ export default function Footer() {
               {/* Customer Support WhatsApp */}
               <li>
                 <a href={WA_SUPPORT} target="_blank" rel={REL}
-                  className={"group flex items-start gap-3 rounded-xl border border-[#2E8B57]/15 bg-[#2E8B57]/6 p-3 transition-all hover:border-[#2E8B57]/35 hover:bg-[#2E8B57]/12 " + (isRTL ? "flex-row-reverse text-right" : "")}>
+                  className={"group flex items-start gap-3 rounded-xl border border-[#2E8B57]/20 bg-[#2E8B57]/8 p-3 transition-all hover:border-[#2E8B57]/40 hover:bg-[#2E8B57]/14 " + (isRTL ? "flex-row-reverse text-right" : "")}>
                   <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#2E8B57]/20">
                     <MessageCircle size={13} className="text-[#4DB882]" />
                   </div>
@@ -295,7 +316,7 @@ export default function Footer() {
                     <p className={"text-xs font-bold text-white/80 " + font}>
                       {language === "ar" ? "دعم العملاء" : "Support client"}
                     </p>
-                    <p className="text-[11px] text-white/40 font-latin">WhatsApp 0664397031</p>
+                    <p className="text-[11px] text-white/55 font-latin">WhatsApp 0664397031</p>
                   </div>
                 </a>
               </li>
@@ -311,7 +332,7 @@ export default function Footer() {
                     <p className={"text-xs font-bold text-white/65 " + font}>
                       {language === "ar" ? "طلبات الشراء" : "Commandes"}
                     </p>
-                    <p className="text-[11px] text-white/40 font-latin">WhatsApp 0664500789</p>
+                    <p className="text-[11px] text-white/55 font-latin">WhatsApp 0664500789</p>
                   </div>
                 </a>
               </li>
@@ -348,7 +369,7 @@ export default function Footer() {
             <div className={"mt-5 flex flex-wrap gap-1.5 " + (isRTL ? "justify-end" : "")}>
               {["Visa", "CMI", "Cash", "CB"].map((b) => (
                 <span key={b}
-                  className="rounded-md border border-white/10 bg-white/4 px-2.5 py-1 text-[9px] font-black uppercase tracking-wider text-white/25">
+                  className="rounded-md border border-white/12 bg-white/[0.05] px-2.5 py-1 text-[9px] font-black uppercase tracking-wider text-white/55">
                   {b}
                 </span>
               ))}
@@ -359,10 +380,10 @@ export default function Footer() {
       </div>
 
       {/* ── Delivery banner ── */}
-      <div style={{ background: "linear-gradient(90deg,#0d3b36 0%,#1a5c4a 50%,#0d3b36 100%)" }}>
+      <div style={{ background: "linear-gradient(90deg,#0c3528 0%,#1e6b4a 50%,#0c3528 100%)", borderTop: "1px solid rgba(46,139,87,0.2)", borderBottom: "1px solid rgba(46,139,87,0.15)" }}>
         <div dir={dir} className={"mx-auto flex max-w-7xl items-center justify-center gap-3 px-5 py-3 text-center " + font}>
           <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#4DB882]" />
-          <p className={"text-xs font-bold text-white/70 " + font}>
+          <p className={"text-xs font-bold text-white/80 tracking-wide " + font}>
             {language === "ar"
               ? "توصيل سريع ومضمون لسلا 🛵 — اطلب الآن وتسلم اليوم!"
               : language === "fr"
@@ -374,16 +395,16 @@ export default function Footer() {
       </div>
 
       {/* ── Bottom bar ── */}
-      <div style={{ borderTop: "1px solid rgba(255,255,255,0.05)", background: "#080e19" }}>
+      <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", background: "#050c07" }}>
         <div dir={dir}
           className={"mx-auto flex max-w-7xl flex-col items-center justify-between gap-3 px-5 py-4 md:flex-row " + font}>
 
-          <p className="text-xs text-white/25">
+          <p className="text-xs text-white/50">
             © {year} {t("footer_copyright")}
           </p>
 
           {/* Inline legal links */}
-          <div className={"flex flex-wrap items-center justify-center gap-4 text-[11px] text-white/25 " + row}>
+          <div className={"flex flex-wrap items-center justify-center gap-4 text-[11px] text-white/50 " + row}>
             {[
               { href: "/legal/cgu",     fr: "CGU",              ar: "الشروط" },
               { href: "/legal/privacy", fr: "Confidentialité",  ar: "الخصوصية" },
@@ -398,7 +419,7 @@ export default function Footer() {
 
           {/* Made with love */}
           <div className={"flex items-center gap-1.5 " + row}>
-            <span className="text-[11px] text-white/20">{t("footer_made_in")}</span>
+            <span className="text-[11px] text-white/55">{t("footer_made_in")}</span>
             <Heart size={10} className="text-[#C0614A]/50 fill-[#C0614A]/30" />
           </div>
 

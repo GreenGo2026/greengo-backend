@@ -1,6 +1,8 @@
 ﻿// src/App.tsx
 import "./index.css";
+import { Suspense, lazy } from "react";
 import { useEffect }              from "react";
+import StickyCartBar from "./components/ui/StickyCartBar";
 import CookieBanner               from "./components/ui/CookieBanner";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { LanguageProvider }       from "./contexts/LanguageContext";
@@ -9,17 +11,27 @@ import Header                     from "./components/layout/Header";
 import Footer                     from "./components/layout/Footer";
 import MobileBottomNav            from "./components/layout/MobileBottomNav";
 import NewsletterModal            from "./components/ui/NewsletterModal";
-import HeroLandingPage            from "./pages/HeroLandingPage";
-import HomePage                   from "./pages/HomePage";
-import CartPage                   from "./pages/CartPage";
-import AdminPage                  from "./pages/AdminPage";
-import AdminOrders                from "./pages/Admin/AdminOrders";
-import POSPage                    from "./pages/Admin/POSPage";
-import SuperAdminPage             from "./pages/SuperAdminPage";
-import AboutPage                  from "./pages/AboutPage";
-import ContactPage                from "./pages/ContactPage";
-import PaymentGateway             from "./pages/Payment/PaymentGateway";
-import UserDashboard              from "./pages/Profile/UserDashboard";
+const HeroLandingPage  = lazy(() => import("./pages/HeroLandingPage"));
+const HomePage         = lazy(() => import("./pages/HomePage"));
+const CartPage         = lazy(() => import("./pages/CartPage"));
+const AdminPage        = lazy(() => import("./pages/AdminPage"));
+const AdminOrders      = lazy(() => import("./pages/Admin/AdminOrders"));
+const POSPage          = lazy(() => import("./pages/Admin/POSPage"));
+const SuperAdminPage   = lazy(() => import("./pages/SuperAdminPage"));
+const AboutPage        = lazy(() => import("./pages/AboutPage"));
+const ContactPage      = lazy(() => import("./pages/ContactPage"));
+const PaymentGateway   = lazy(() => import("./pages/Payment/PaymentGateway"));
+const UserDashboard    = lazy(() => import("./pages/Profile/UserDashboard"));
+const PrivacyPage      = lazy(() => import("./pages/legal/PrivacyPage"));
+const CGUPage          = lazy(() => import("./pages/legal/CGUPage"));
+const RecrutementPage  = lazy(() => import("./pages/RecrutementPage"));
+const TermsPage        = lazy(() => import("./pages/legal/TermsPage"));
+const InfoPage         = lazy(() => import("./pages/legal/InfoPage"));
+const ProductPage     = lazy(() => import("./pages/ProductPage"));
+const PanierTypePage  = lazy(() => import("./pages/PanierTypePage"));
+const OffresPage      = lazy(() => import("./pages/OffresPage"));
+const TrackOrderPage  = lazy(() => import("./pages/TrackOrderPage"));
+const FidelitePage     = lazy(() => import("./pages/FidelitePage"));
 import LegalTemplate, { LEGAL_PAGES } from "./pages/Legal/LegalTemplate";
 
 // ── Anti-scraping / anti-inspect protection ──────────────────────────────────
@@ -51,8 +63,10 @@ function useAntiScraping() {
 
     // 3. Detect devtools open via size heuristic — blur content if opened
     const devtoolsCheck = setInterval(() => {
-      const widthThreshold  = window.outerWidth  - window.innerWidth  > 160;
-      const heightThreshold = window.outerHeight - window.innerHeight > 160;
+      // Use 300px threshold to avoid false positives on Android/iOS browsers
+      // which have large native UI chrome (address bar, bottom nav, etc.)
+      const widthThreshold  = window.outerWidth  - window.innerWidth  > 300;
+      const heightThreshold = window.outerHeight - window.innerHeight > 300;
       if (widthThreshold || heightThreshold) {
         document.body.style.filter = "blur(8px)";
       } else {
@@ -73,6 +87,29 @@ function useAntiScraping() {
   }, []);
 }
 
+
+// Minimal full-screen spinner shown while lazy chunks load
+function PageLoader() {
+  return (
+    <div style={{
+      minHeight: "100vh",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      background: "#0a2318",
+    }}>
+      <div style={{
+        width: 40, height: 40,
+        border: "3px solid rgba(46,139,87,0.2)",
+        borderTop: "3px solid #2E8B57",
+        borderRadius: "50%",
+        animation: "spin 0.8s linear infinite",
+      }} />
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
+  );
+}
+
 // ── Public shell (all routes that show Header + Footer) ──────────────────────
 function PublicShell() {
   const cart       = useCartStore((s) => s.cart);
@@ -81,7 +118,7 @@ function PublicShell() {
 
   return (
     <div
-      className="flex min-h-screen flex-col pb-16 md:pb-0"
+      className="flex min-h-screen flex-col pb-16 md:pb-0" style={{ overflowX: "hidden" }}
       style={{
         background: "#FAF7F2",
         // Disable text selection on content container
@@ -113,23 +150,19 @@ function PublicShell() {
           <Route path="/addresses"    element={<UserDashboard />}   />
 
           {/* ── Legal pages ── */}
-          <Route path="/legal/cgu"     element={<LegalTemplate {...LEGAL_PAGES.cgu}         />} />
-          <Route path="/legal/privacy" element={<LegalTemplate {...LEGAL_PAGES.privacy}     />} />
-          <Route path="/legal/terms"   element={<LegalTemplate {...LEGAL_PAGES.terms}       />} />
-          <Route path="/legal/info"    element={<LegalTemplate {...LEGAL_PAGES.info}        />} />
+          <Route path="/legal/cgu"     element={<CGUPage />} />
+          <Route path="/legal/privacy" element={<PrivacyPage />} />
+          <Route path="/legal/terms"   element={<TermsPage />} />
+          <Route path="/legal/info"    element={<InfoPage />} />
           <Route path="/legal/cookies" element={<LegalTemplate {...LEGAL_PAGES.privacy}     />} />
-          <Route path="/recrutement"   element={<LegalTemplate {...LEGAL_PAGES.recrutement} />} />
+          <Route path="/recrutement"   element={<RecrutementPage />} />
 
           {/* ── Misc ── */}
-          <Route path="/fidelite" element={<LegalTemplate
-            title="Programme Fidélité"
-            subtitle="Récompenses GreenGo - Commandez et gagnez des points"
-            sections={[
-              { heading: "Comment ça marche ?",   body: "Chaque commande vous rapporte des points GreenGo. 10 MAD dépensés = 1 point. 100 points = 10 MAD de réduction sur votre prochaine commande." },
-              { heading: "Avantages exclusifs",   body: "Accès prioritaire aux produits de saison · Livraison gratuite illimitée · Offres spéciales réservées aux membres fidèles." },
-              { heading: "Rejoindre le programme", body: "L'inscription est automatique dès votre première commande. Contactez-nous sur WhatsApp pour consulter votre solde de points." },
-            ]} />}
-          />
+          <Route path="/produit/:id"    element={<ProductPage />} />
+          <Route path="/panier-type"    element={<PanierTypePage />} />
+          <Route path="/offres"         element={<OffresPage />} />
+          <Route path="/track/:orderId?" element={<TrackOrderPage />} />
+          <Route path="/fidelite"   element={<FidelitePage />} />
           <Route path="/faq" element={<LegalTemplate
             title="Questions Fréquentes"
             subtitle="FAQ - GreenGo Market"
@@ -154,6 +187,7 @@ function PublicShell() {
       <Footer />
       <MobileBottomNav />
       <NewsletterModal />
+      <StickyCartBar />
     </div>
   );
 }
@@ -165,12 +199,14 @@ export default function App() {
   return (
     <BrowserRouter>
       <LanguageProvider>
-        <Routes>
-          {/* Super-admin is fully standalone — no Header/Footer */}
-          <Route path="/super-admin" element={<SuperAdminPage />} />
-          {/* All other routes get the public shell */}
-          <Route path="/*" element={<PublicShell />} />
-        </Routes>
+        <Suspense fallback={<PageLoader />}>
+          <Routes>
+            {/* Super-admin is fully standalone — no Header/Footer */}
+            <Route path="/super-admin" element={<SuperAdminPage />} />
+            {/* All other routes get the public shell */}
+            <Route path="/*" element={<PublicShell />} />
+          </Routes>
+        </Suspense>
         <CookieBanner />
       </LanguageProvider>
     </BrowserRouter>

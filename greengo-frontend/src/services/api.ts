@@ -28,6 +28,8 @@ export interface DBProduct {
   image_status:string;
   visible:     boolean;
   created_at: string | null;
+  on_sale?:      boolean;
+  discount_pct?: number;
 }
 
 export interface DBProductUpdate {
@@ -191,4 +193,28 @@ export async function getOrders(status?: OrderStatus, limit = 50): Promise<Order
 export async function updateOrderStatus(orderId: string, status: OrderStatus): Promise<OrderStatusUpdateResponse> {
   const r = await apiClient.patch<OrderStatusUpdateResponse>(`/orders/${orderId}/status`, null, { params: { status } });
   return r.data;
+}
+
+export async function fetchProductById(id: string): Promise<DBProduct | null> {
+  try {
+    const r = await apiClient.get<DBProduct>(`/products/${id}`);
+    return r.data;
+  } catch {
+    // Fall back: search in full list
+    try {
+      const all = await getProducts();
+      return all.find(p => p.id === id) ?? null;
+    } catch {
+      return null;
+    }
+  }
+}
+
+export async function getRelatedProducts(category: string, excludeId: string): Promise<DBProduct[]> {
+  try {
+    const all = await getProducts({ category });
+    return all.filter(p => p.id !== excludeId).slice(0, 4);
+  } catch {
+    return [];
+  }
 }

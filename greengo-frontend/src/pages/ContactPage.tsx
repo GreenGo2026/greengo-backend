@@ -138,8 +138,8 @@ export default function ContactPage() {
                   </div>
                   <div>
                     <p className="text-[10px] font-extrabold uppercase tracking-widest text-gray-400">Email</p>
-                    <a href="mailto:CONTACT@MYGRENGO.COM" className="mt-1 block text-sm font-semibold text-gray-700 hover:text-[#2E8B57] font-latin">CONTACT@MYGRENGO.COM</a>
-                    <a href="mailto:support@greengo.ma" className="block text-xs text-gray-500 hover:text-[#2E8B57] font-latin">support@greengo.ma</a>
+                    <a href="mailto:team@mygreengoo.com" className="mt-1 block text-sm font-semibold text-gray-700 hover:text-[#2E8B57] font-latin">team@mygreengoo.com</a>
+                    <a href="mailto:team@mygreengoo.com" className="block text-xs text-gray-500 hover:text-[#2E8B57] font-latin">team@mygreengoo.com</a>
                   </div>
                 </div>
 

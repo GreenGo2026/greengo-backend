@@ -1,5 +1,17 @@
-@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&family=Cairo:wght@400;600;700;800;900&family=Poppins:wght@400;500;600;700;800&family=Montserrat:wght@400;500;600;700;800&display=swap');
+/* Font display swap — prevents invisible text during font load */
+@font-face {
+  font-family: 'DM Sans';
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Cormorant Garamond';
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Tajawal';
+  font-display: swap;
+}
+
 
 /* ═══════════════════════════════════════════════════════════════
    GreenGo — Moroccan Night Market Theme
@@ -346,4 +358,307 @@ body {
 
   .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
   .scrollbar-hide::-webkit-scrollbar { display: none; }
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   GREENGO DESIGN SYSTEM — Global visual foundation
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── Design tokens ─────────────────────────────────────────────── */
+:root {
+  /* Brand colors */
+  --gg-green-900:   #031409;
+  --gg-green-800:   #061a12;
+  --gg-green-700:   #0a2318;
+  --gg-green-600:   #0d3b36;
+  --gg-green-500:   #1a5c4a;
+  --gg-green-400:   #2E8B57;
+  --gg-green-300:   #4DB882;
+  --gg-green-200:   #4ade80;
+  --gg-gold:        #C9A96E;
+  --gg-gold-light:  #e8c98a;
+  --gg-orange:      #FF9800;
+  --gg-dark:        #0a1f14;
+  --gg-surface:     rgba(255,255,255,0.04);
+  --gg-border:      rgba(255,255,255,0.08);
+  --gg-border-gold: rgba(201,169,110,0.2);
+
+  /* Typography */
+  --font-display:  'Cormorant Garamond', Georgia, serif;
+  --font-body:     'DM Sans', 'Poppins', sans-serif;
+  --font-arabic:   'Tajawal', 'Cairo', sans-serif;
+  --font-mono:     'DM Mono', monospace;
+
+  /* Spacing scale */
+  --radius-sm:  8px;
+  --radius-md:  12px;
+  --radius-lg:  16px;
+  --radius-xl:  20px;
+  --radius-2xl: 24px;
+
+  /* Shadows */
+  --shadow-card:    0 2px 16px rgba(0,0,0,0.3), 0 1px 4px rgba(0,0,0,0.2);
+  --shadow-card-hover: 0 8px 32px rgba(0,0,0,0.4), 0 2px 8px rgba(46,139,87,0.15);
+  --shadow-green:   0 4px 24px rgba(46,139,87,0.25);
+  --shadow-gold:    0 4px 24px rgba(201,169,110,0.2);
+}
+
+/* ── Base typography ────────────────────────────────────────────── */
+body {
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+.font-latin  { font-family: var(--font-body); }
+.font-arabic { font-family: var(--font-arabic); }
+
+/* Display headings use Cormorant for French/EN, Tajawal for AR */
+h1, .display-heading {
+  font-family: var(--font-display);
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+}
+
+[lang="ar"] h1,
+[dir="rtl"] h1 {
+  font-family: var(--font-arabic);
+  letter-spacing: 0;
+}
+
+/* ── Product card — premium refinement ──────────────────────────── */
+.gg-product-card {
+  background: #ffffff;
+  border-radius: var(--radius-xl);
+  border: 1px solid rgba(0,0,0,0.06);
+  box-shadow: var(--shadow-card);
+  transition:
+    transform 0.25s cubic-bezier(0.34,1.56,0.64,1),
+    box-shadow 0.25s ease,
+    border-color 0.25s ease;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.gg-product-card:hover {
+  transform: translateY(-4px) scale(1.01);
+  box-shadow: var(--shadow-card-hover);
+  border-color: rgba(46,139,87,0.2);
+}
+
+.gg-product-card:active {
+  transform: translateY(-1px) scale(0.99);
+}
+
+/* Image zone — consistent height */
+.gg-product-card .card-image-zone {
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+  position: relative;
+}
+
+/* ── Category pills ─────────────────────────────────────────────── */
+.gg-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 9999px;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  color: rgba(255,255,255,0.6);
+  font-family: var(--font-body);
+}
+
+.gg-pill:hover {
+  background: rgba(255,255,255,0.1);
+  color: #fff;
+  border-color: rgba(255,255,255,0.2);
+  transform: translateY(-1px);
+}
+
+.gg-pill.active {
+  background: linear-gradient(135deg, var(--gg-green-400), #1a5c4a);
+  border-color: var(--gg-green-400);
+  color: #fff;
+  box-shadow: 0 2px 12px rgba(46,139,87,0.35);
+  font-weight: 700;
+}
+
+/* ── Hero sections ──────────────────────────────────────────────── */
+.gg-hero {
+  background: linear-gradient(180deg, var(--gg-green-600) 0%, var(--gg-green-700) 100%);
+  position: relative;
+  overflow: hidden;
+}
+
+.gg-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60'%3E%3Cg fill='none' stroke='rgba(201,169,110,0.08)' stroke-width='0.5'%3E%3Cpolygon points='30,3 35,13 47,13 38,20 41,32 30,26 19,32 22,20 13,13 25,13'/%3E%3C/g%3E%3C/svg%3E") repeat;
+  background-size: 60px 60px;
+}
+
+/* ── Zellige decorative border ──────────────────────────────────── */
+.zellige-border {
+  height: 3px;
+  background-image: repeating-linear-gradient(
+    90deg,
+    #C9A96E  0px,   #C9A96E  12px,
+    #2E8B57  12px,  #2E8B57  24px,
+    #FF9800  24px,  #FF9800  36px,
+    #2E8B57  36px,  #2E8B57  48px
+  );
+  background-size: 48px 3px;
+  opacity: 0.7;
+}
+
+/* ── Add-to-cart button — tactile ───────────────────────────────── */
+.btn-add-cart {
+  background: linear-gradient(135deg, var(--gg-green-400) 0%, #1F6B40 100%);
+  color: white;
+  font-weight: 700;
+  font-size: 13px;
+  border-radius: var(--radius-md);
+  padding: 10px 16px;
+  border: none;
+  cursor: pointer;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.2s cubic-bezier(0.34,1.56,0.64,1);
+  box-shadow: 0 2px 12px rgba(46,139,87,0.3);
+  font-family: var(--font-body);
+}
+
+.btn-add-cart:hover {
+  transform: scale(1.02);
+  box-shadow: 0 4px 20px rgba(46,139,87,0.4);
+  background: linear-gradient(135deg, #3aa868 0%, #1F6B40 100%);
+}
+
+.btn-add-cart:active {
+  transform: scale(0.97);
+}
+
+/* ── Price display — editorial ──────────────────────────────────── */
+.gg-price {
+  font-family: var(--font-body);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: #1A6640;
+  line-height: 1;
+}
+
+.gg-price-unit {
+  font-size: 11px;
+  font-weight: 500;
+  color: rgba(0,0,0,0.35);
+  letter-spacing: 0;
+}
+
+/* ── Search input ────────────────────────────────────────────────── */
+.gg-search {
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: var(--radius-xl);
+  color: white;
+  font-family: var(--font-body);
+  transition: all 0.2s ease;
+}
+
+.gg-search:focus {
+  background: rgba(255,255,255,0.1);
+  border-color: rgba(46,139,87,0.5);
+  box-shadow: 0 0 0 3px rgba(46,139,87,0.12);
+  outline: none;
+}
+
+/* ── Trust badges ────────────────────────────────────────────────── */
+.gg-trust-badge {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-radius: var(--radius-lg);
+  background: var(--gg-surface);
+  border: 1px solid var(--gg-border);
+  transition: border-color 0.2s ease;
+}
+
+.gg-trust-badge:hover {
+  border-color: rgba(46,139,87,0.25);
+}
+
+/* ── Skeleton loading — refined ─────────────────────────────────── */
+@keyframes gg-shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+
+.gg-skeleton {
+  background: linear-gradient(
+    90deg,
+    rgba(255,255,255,0.04) 25%,
+    rgba(255,255,255,0.08) 50%,
+    rgba(255,255,255,0.04) 75%
+  );
+  background-size: 800px 100%;
+  animation: gg-shimmer 1.4s ease-in-out infinite;
+  border-radius: var(--radius-md);
+}
+
+/* ── Staggered card entrance animation ──────────────────────────── */
+@keyframes gg-fadeup {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.gg-product-card {
+  animation: gg-fadeup 0.4s ease-out both;
+}
+
+.gg-product-card:nth-child(1)  { animation-delay: 0.05s; }
+.gg-product-card:nth-child(2)  { animation-delay: 0.10s; }
+.gg-product-card:nth-child(3)  { animation-delay: 0.15s; }
+.gg-product-card:nth-child(4)  { animation-delay: 0.20s; }
+.gg-product-card:nth-child(5)  { animation-delay: 0.25s; }
+.gg-product-card:nth-child(6)  { animation-delay: 0.30s; }
+.gg-product-card:nth-child(7)  { animation-delay: 0.35s; }
+.gg-product-card:nth-child(8)  { animation-delay: 0.40s; }
+.gg-product-card:nth-child(9)  { animation-delay: 0.45s; }
+.gg-product-card:nth-child(10) { animation-delay: 0.50s; }
+
+/* ── Mobile refinements ─────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .gg-product-card:hover {
+    transform: none; /* disable hover lift on touch */
+  }
+
+  .gg-pill {
+    padding: 6px 12px;
+    font-size: 12px;
+  }
+}
+
+/* ── Scrollbar — subtle ─────────────────────────────────────────── */
+::-webkit-scrollbar       { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(46,139,87,0.3); border-radius: 9999px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(46,139,87,0.5); }
+
+/* ── Selection color ────────────────────────────────────────────── */
+::selection {
+  background: rgba(46,139,87,0.25);
+  color: #fff;
 }

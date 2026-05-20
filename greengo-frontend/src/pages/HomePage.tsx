@@ -7,7 +7,9 @@ import {
 } from "lucide-react";
 import { getProducts } from "../services/api";
 import type { DBProduct } from "../services/api";
+import { Link } from "react-router-dom";
 import { useCartStore, getUnitStep, formatQuantity } from "../store/cartStore";
+import SocialProofStrip from "../components/ui/SocialProofStrip";
 import { useLanguage } from "../contexts/LanguageContext";
 
 // ── Niche category definitions ───────────────────────────────────────────────
@@ -25,9 +27,10 @@ interface NicheCategory {
 // Resolve image URL — prepend API base for relative /static/ paths
 const _API = (import.meta.env.VITE_API_URL || "http://127.0.0.1:8000").replace(/\/+$/, "");
 function resolveImg(url: string | null | undefined): string {
-  if (!url) return "";
-  if (url.startsWith("http")) return url;          // already absolute
-  return _API + url;                               // prepend backend base
+  if (!url || url.trim() === "") return "";
+  if (url.startsWith("http://") || url.startsWith("https://")) return url;
+  if (url.startsWith("/")) return _API + url;
+  return _API + "/" + url;
 }
 
 const NICHE_CATS: NicheCategory[] = [
@@ -53,23 +56,55 @@ const NICHE_CATS: NicheCategory[] = [
     label_fr: "Légumes",
     label_ar: "خضروات",
     label_en: "Vegetables",
-    db_match: ["Vegetables", "vegetables", "légumes", "Légumes"],
+    db_match: ["Vegetables", "vegetables", "Purified Greens", "purified greens"],
   },
   {
-    key: "Whole Chicken",
+    key: "White Meats",
     emoji: "🍗",
-    label_fr: "Poulet entier",
-    label_ar: "دجاجة كاملة",
-    label_en: "Whole Chicken",
-    db_match: ["White Meats", "Whole Chicken", "Poulet entier", "poulet entier"],
+    label_fr: "Viandes",
+    label_ar: "اللحوم",
+    label_en: "White Meats",
+    db_match: ["White Meats", "white meats", "Whole Chicken", "Chicken Cuts"],
   },
   {
-    key: "Chicken Cuts",
-    emoji: "🥩",
-    label_fr: "Découpes poulet",
-    label_ar: "قطع الدجاج",
-    label_en: "Chicken Cuts",
-    db_match: ["Chicken Cuts", "Découpes", "découpes", "Eggs", "Other"],
+    key: "Eggs",
+    emoji: "🥚",
+    label_fr: "Oeufs",
+    label_ar: "بيض",
+    label_en: "Eggs",
+    db_match: ["Eggs", "eggs"],
+  },
+  {
+    key: "Natural Juices",
+    emoji: "🧃",
+    label_fr: "Jus naturels",
+    label_ar: "العصائر الطبيعية",
+    label_en: "Natural Juices",
+    db_match: ["Natural Juices", "Juices", "juices"],
+  },
+  {
+    key: "Olives",
+    emoji: "🫒",
+    label_fr: "Olives",
+    label_ar: "زيتون",
+    label_en: "Olives",
+    db_match: ["Olives", "olives"],
+  },
+  {
+    key: "Epices",
+    emoji: "🧂",
+    label_fr: "Epices",
+    label_ar: "توابل",
+    label_en: "Spices",
+    db_match: ["Epices", "Spices", "epices", "spices"],
+  },
+  {
+    key: "Mixed Packs",
+    emoji: "🛒",
+    label_fr: "Paniers mixtes",
+    label_ar: "باقات الخضار والفواكه مخلطة",
+    label_en: "Mixed Packs",
+    db_match: ["Mixed Packs", "Mixed Fruit & Veggie Packs", "mixed packs"],
   },
 ];
 
@@ -81,13 +116,18 @@ function catLabel(cat: NicheCategory, lang: string): string {
 
 // ── Category visual metadata ─────────────────────────────────────────────────
 const CAT_META: Record<string, { emoji: string; bg: string; text: string; border: string }> = {
-  Fruits:          { emoji: "🍎", bg: "bg-orange-50",  text: "text-orange-600",  border: "border-orange-100" },
-  Vegetables:      { emoji: "🥕", bg: "bg-green-50",   text: "text-green-700",   border: "border-green-100"  },
-  "White Meats":   { emoji: "🍗", bg: "bg-rose-50",    text: "text-rose-600",    border: "border-rose-100"   },
-  "Whole Chicken": { emoji: "🍗", bg: "bg-rose-50",    text: "text-rose-600",    border: "border-rose-100"   },
-  "Chicken Cuts":  { emoji: "🥩", bg: "bg-red-50",     text: "text-red-600",     border: "border-red-100"    },
-  Eggs:            { emoji: "🥚", bg: "bg-yellow-50",  text: "text-yellow-700",  border: "border-yellow-100" },
-  Other:           { emoji: "🛒", bg: "bg-gray-50",    text: "text-gray-600",    border: "border-gray-100"   },
+  Fruits:              { emoji: "🍎", bg: "bg-orange-50",  text: "text-orange-600",  border: "border-orange-100" },
+  Vegetables:          { emoji: "🥕", bg: "bg-green-50",   text: "text-green-700",   border: "border-green-100"  },
+  "Purified Greens":   { emoji: "🥗", bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-100"},
+  "White Meats":       { emoji: "🍗", bg: "bg-rose-50",    text: "text-rose-600",    border: "border-rose-100"   },
+  "Whole Chicken":     { emoji: "🍗", bg: "bg-rose-50",    text: "text-rose-600",    border: "border-rose-100"   },
+  "Chicken Cuts":      { emoji: "🥩", bg: "bg-red-50",     text: "text-red-600",     border: "border-red-100"    },
+  Eggs:                { emoji: "🥚", bg: "bg-yellow-50",  text: "text-yellow-700",  border: "border-yellow-100" },
+  "Natural Juices":    { emoji: "🧃", bg: "bg-cyan-50",    text: "text-cyan-700",    border: "border-cyan-100"   },
+  "Olives":          { emoji: "🫒", bg: "bg-lime-50",    text: "text-lime-700",   border: "border-lime-100"   },
+  "Epices":          { emoji: "🧂", bg: "bg-orange-50",  text: "text-orange-700", border: "border-orange-100" },
+  "Mixed Packs":       { emoji: "🛒", bg: "bg-purple-50",  text: "text-purple-700",  border: "border-purple-100" },
+  Other:               { emoji: "🛒", bg: "bg-gray-50",    text: "text-gray-600",    border: "border-gray-100"   },
 };
 
 function getCatMeta(category: string) {
@@ -150,6 +190,7 @@ function QtyControl({ product }: { product: DBProduct }) {
     return (
       <button
         onClick={() => add(proxy, step)}
+        aria-label="Ajouter au panier"
         className={"group flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-[#2E8B57] text-xs font-extrabold text-white shadow-md shadow-[#2E8B57]/20 transition-all duration-200 hover:bg-[#1F6B40] hover:shadow-lg hover:shadow-[#2E8B57]/25 active:scale-[0.97] " + font}>
         <ShoppingCart size={14} strokeWidth={2.5} className="transition-transform group-hover:-rotate-6" />
         {language === "ar" ? "أضف للسلة" : language === "fr" ? "Ajouter" : "Add to cart"}
@@ -161,6 +202,7 @@ function QtyControl({ product }: { product: DBProduct }) {
     <div className="flex h-10 items-center overflow-hidden rounded-xl border-2 border-[#2E8B57]/25 bg-[#2E8B57]/6">
       <button
         onClick={() => remove(product.name_ar, step)}
+        aria-label="Réduire la quantité"
         className="flex h-full w-10 shrink-0 items-center justify-center text-[#2E8B57] transition-colors hover:bg-[#2E8B57]/12 active:scale-90">
         <Minus size={14} strokeWidth={2.5} />
       </button>
@@ -169,6 +211,7 @@ function QtyControl({ product }: { product: DBProduct }) {
       </span>
       <button
         onClick={() => add(proxy, step)}
+        aria-label="Augmenter la quantité"
         className="flex h-full w-10 shrink-0 items-center justify-center text-[#2E8B57] transition-colors hover:bg-[#2E8B57]/12 active:scale-90">
         <Plus size={14} strokeWidth={2.5} />
       </button>
@@ -235,6 +278,7 @@ function ProductGalleryModal({
 
         {/* Close */}
         <button onClick={onClose}
+          aria-label="Fermer"
           className="absolute right-4 top-4 z-30 flex h-9 w-9 items-center justify-center rounded-full bg-black/8 hover:bg-black/15 transition-colors">
           <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
             <path d="M1 1l11 11M12 1L1 12" stroke="#374151" strokeWidth="2" strokeLinecap="round"/>
@@ -256,7 +300,9 @@ function ProductGalleryModal({
                 <img
                   ref={mg.imgRef}
                   src={resolveImg(product.image_url)}
-                  alt={product.name_fr || "product"}
+                  alt={product.name_fr || product.name_ar || "product"}
+                  width={400}
+                  height={400}
                   className="absolute inset-0 w-full h-full object-contain select-none pointer-events-none"
                   style={{ padding: "9%", filter: "drop-shadow(0 8px 20px rgba(0,0,0,0.10))" }}
                   onError={() => setImgErr(true)}
@@ -311,7 +357,9 @@ function ProductGalleryModal({
                 onClick={() => setZoomed(true)}>
                 <img
                   src={resolveImg(product.image_url)}
-                  alt={product.name_fr || "product"}
+                  alt={product.name_fr || product.name_ar || "product"}
+                  width={800}
+                  height={800}
                   className="h-full w-full object-contain select-none"
                   style={{ padding: "8%", filter: "drop-shadow(0 6px 12px rgba(0,0,0,0.10))" }}
                   onError={() => setImgErr(true)}
@@ -409,11 +457,14 @@ function ProductGalleryModal({
           onClick={() => setZoomed(false)}>
           <img
             src={resolveImg(product.image_url)}
-            alt={product.name_fr || "product"}
+            alt={product.name_fr || product.name_ar || "product"}
+            width={800}
+            height={800}
             className="max-h-[88vh] max-w-[92vw] object-contain select-none"
             style={{ cursor: "zoom-out" }}
           />
           <button
+            aria-label="Fermer le zoom"
             className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-white/12 text-white hover:bg-white/22 transition-colors"
             onClick={() => setZoomed(false)}>
             <svg width="15" height="15" viewBox="0 0 13 13" fill="none">
@@ -449,7 +500,7 @@ function ProductCard({ product, rank }: { product: DBProduct; rank: number }) {
         className="gg-product-card group relative flex flex-col overflow-hidden"
         style={{ minHeight: "340px" }}>
         <div
-          className={"relative overflow-hidden cursor-pointer " + meta.bg}
+          className={"relative overflow-hidden cursor-pointer " + (product.image_url?.endsWith('.jpg') || product.image_url?.endsWith('.jpeg') ? "bg-white" : meta.bg)}
           style={{ aspectRatio: "1 / 1", width: "100%" }}
           onClick={() => product.image_url && !imgError && setShowModal(true)}>
           <div className="absolute inset-0 bg-gradient-to-t from-black/6 via-transparent to-transparent pointer-events-none z-10" />
@@ -457,8 +508,10 @@ function ProductCard({ product, rank }: { product: DBProduct; rank: number }) {
             <img
               src={resolveImg(product.image_url)}
               alt={product.name_fr || product.name_ar || "product"}
-              className="absolute inset-0 h-full w-full object-contain transition-transform duration-500 group-hover:scale-[1.07] select-none pointer-events-none"
-              style={{ padding: "10%", filter: "drop-shadow(0 4px 10px rgba(0,0,0,0.09))" }}
+              width={400}
+              height={400}
+              className={`absolute inset-0 h-full w-full transition-transform duration-500 group-hover:scale-[1.07] select-none pointer-events-none ${product.image_url?.endsWith('.jpg') || product.image_url?.endsWith('.jpeg') ? 'object-cover' : 'object-contain'}`}
+              style={product.image_url?.endsWith('.jpg') || product.image_url?.endsWith('.jpeg') ? {} : { padding: "8%", filter: "drop-shadow(0 4px 10px rgba(0,0,0,0.09))" }}
               onError={() => setImgError(true)}
             />
           ) : (
@@ -478,12 +531,10 @@ function ProductCard({ product, rank }: { product: DBProduct; rank: number }) {
               </div>
             </div>
           )}
-          {isTop3 && (
+          {rank === 0 && (
             <div className="absolute left-2.5 top-2.5 z-20 flex items-center gap-1 rounded-full bg-[#FF9800] px-2.5 py-1 shadow-lg shadow-[#FF9800]/30">
               <Star size={9} className="fill-white text-white" />
-              <span className="text-[9px] font-extrabold text-white tracking-wide">
-                {rank === 0 ? "TOP" : "#" + (rank + 1)}
-              </span>
+              <span className="text-[9px] font-extrabold text-white tracking-wide">TOP</span>
             </div>
           )}
           <div className="absolute right-2.5 top-2.5 z-20">
@@ -511,11 +562,13 @@ function ProductCard({ product, rank }: { product: DBProduct; rank: number }) {
             </div>
           )}
         </div>
-        <div className="flex flex-1 flex-col gap-2.5 p-3.5">
+        <div className="flex flex-1 flex-col gap-2 p-3 sm:p-3.5">
           <div>
-            <h3 dir="rtl" className={"line-clamp-2 text-sm font-extrabold leading-snug text-gray-900 font-arabic " + (language === "ar" ? "text-right" : "text-left")}>
-              {name}
-            </h3>
+            <Link to={`/produit/${product.id}`} className="group-hover:underline decoration-[#2E8B57]/40">
+              <h3 dir="rtl" className={"line-clamp-2 text-sm font-extrabold leading-snug text-gray-900 font-arabic hover:text-[#2E8B57] transition-colors " + (language === "ar" ? "text-right" : "text-left")}>
+                {name}
+              </h3>
+            </Link>
             {product.name_fr && product.name_fr !== product.name_ar && (
               <p className={"mt-0.5 text-[11px] text-gray-400 font-latin truncate " + (language === "ar" ? "text-right" : "text-left")}>
                 {product.name_fr}
@@ -525,7 +578,7 @@ function ProductCard({ product, rank }: { product: DBProduct; rank: number }) {
           <div className={"flex items-end justify-between " + (language === "ar" ? "flex-row-reverse" : "")}>
             <div className={language === "ar" ? "text-right" : "text-left"}>
               <div className="flex items-baseline gap-0.5">
-                <span className="text-xl font-extrabold text-[#1A6640] font-latin leading-none">
+                <span className="text-[22px] font-black text-[#1A6640] font-latin leading-none tracking-tight">
                   {product.price_mad.toFixed(2)}
                 </span>
                 <span className="text-xs font-semibold text-gray-400 font-latin ml-0.5">MAD</span>
@@ -563,13 +616,13 @@ function ProductCard({ product, rank }: { product: DBProduct; rank: number }) {
 // ── Skeleton card ─────────────────────────────────────────────────────────────
 function SkeletonCard() {
   return (
-    <div className="flex flex-col overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm animate-pulse">
-      <div className="h-48 bg-gray-100" />
+    <div className="flex flex-col overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] shadow-sm">
+      <div className="h-48 gg-skeleton rounded-none" />
       <div className="flex flex-col gap-3 p-4">
-        <div className="h-4 w-3/4 rounded-lg bg-gray-100" />
-        <div className="h-3 w-1/2 rounded-lg bg-gray-100" />
-        <div className="h-6 w-1/3 rounded-lg bg-gray-100" />
-        <div className="h-10 w-full rounded-xl bg-gray-100" />
+        <div className="h-4 w-3/4 rounded-lg gg-skeleton" />
+        <div className="h-3 w-1/2 rounded-lg gg-skeleton" />
+        <div className="h-6 w-1/3 rounded-lg gg-skeleton" />
+        <div className="h-10 w-full rounded-xl gg-skeleton" />
       </div>
     </div>
   );
@@ -609,7 +662,15 @@ export default function HomePage() {
   const [loading,   setLoading]   = useState(true);
   const [error,     setError]     = useState("");
   const [activeKey, setActiveKey] = useState<NicheKey>("all");
-  const [search,    setSearch]    = useState("");
+  const [search,       setSearch]       = useState("");
+  const [searchInput,  setSearchInput]  = useState(""); // raw input value
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleSearchChange = useCallback((val: string) => {
+    setSearchInput(val);
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    searchTimer.current = setTimeout(() => setSearch(val), 180);
+  }, []);
   const [sortKey,   setSortKey]   = useState<SortKey>("default");
 
   async function load() {
@@ -656,10 +717,11 @@ export default function HomePage() {
       );
     }
 
-    // Sort
-    if (sortKey === "price_asc")  list.sort((a, b) => a.price_mad - b.price_mad);
-    if (sortKey === "price_desc") list.sort((a, b) => b.price_mad - a.price_mad);
-    if (sortKey === "name_az")    list.sort((a, b) => (a.name_ar ?? "").localeCompare(b.name_ar ?? ""));
+    // Sort — always in-stock first
+    list.sort((a, b) => (b.in_stock ? 1 : 0) - (a.in_stock ? 1 : 0));
+    if (sortKey === "price_asc")  list.sort((a, b) => (b.in_stock === a.in_stock ? a.price_mad - b.price_mad : (b.in_stock ? 1 : -1)));
+    if (sortKey === "price_desc") list.sort((a, b) => (b.in_stock === a.in_stock ? b.price_mad - a.price_mad : (b.in_stock ? 1 : -1)));
+    if (sortKey === "name_az")    list.sort((a, b) => (b.in_stock === a.in_stock ? (a.name_ar ?? "").localeCompare(b.name_ar ?? "") : (b.in_stock ? 1 : -1)));
 
     return list;
   }, [products, activeKey, search, sortKey]);
@@ -678,7 +740,7 @@ export default function HomePage() {
       {/* ── Page hero strip ── */}
       <div className="gg-hero relative overflow-hidden">
         <div className="absolute inset-0 zellige-bg-light opacity-12 pointer-events-none" />
-        <div className="mx-auto max-w-7xl px-5 py-8 md:py-10" dir={dir}>
+        <div className="mx-auto max-w-7xl px-5 pt-4 pb-8 md:py-10" dir={dir}>
           <div className={language === "ar" ? "text-right" : "text-left"}>
             <div className={"inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 mb-3 " + (isRTL ? "flex-row-reverse" : "")}>
               <Flame size={12} className="text-[#FF9800]" />
@@ -686,7 +748,7 @@ export default function HomePage() {
                 {language === "ar" ? "طازج يومياً" : language === "fr" ? "Frais chaque jour" : "Fresh every day"}
               </span>
             </div>
-            <h1 className={"text-2xl font-extrabold text-white md:text-3xl " + font} style={{ letterSpacing: "-0.02em" }}>
+            <h1 className={"text-2xl md:text-4xl font-black text-white " + font} style={{ letterSpacing: "-0.03em", fontFamily: language !== "ar" ? "var(--font-display)" : undefined }}>
               {language === "ar" ? "تسوّق المنتجات الطازجة" : language === "fr" ? "Nos Produits Frais" : "Fresh Product Catalog"}
             </h1>
             <p className={"mt-1.5 text-sm text-white/50 " + font}>
@@ -698,6 +760,7 @@ export default function HomePage() {
         </div>
         <div className="zellige-border" />
       </div>
+      <SocialProofStrip />
 
       <div className="mx-auto max-w-7xl px-4 py-6 space-y-5">
 
@@ -736,7 +799,8 @@ export default function HomePage() {
             <input
               type="text"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              value={searchInput}
+                onChange={(e) => handleSearchChange(e.target.value)}
               dir={dir}
               placeholder={language === "ar" ? "ابحث عن منتج…" : language === "fr" ? "Rechercher un produit…" : "Search products…"}
               className={"w-full rounded-2xl border border-white/10 bg-white/8 py-2.5 text-sm text-white placeholder-white/30 outline-none transition-all focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20 focus:bg-white/12 shadow-sm " + (isRTL ? "pr-10 pl-4" : "pl-10 pr-4") + " " + font}
@@ -762,7 +826,7 @@ export default function HomePage() {
             onClick={load}
             disabled={loading}
             title="Refresh"
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/8 text-white/40 shadow-sm transition-all hover:border-emerald-500/40 hover:text-emerald-400 disabled:opacity-40">
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/8 text-white/55 shadow-sm transition-all hover:border-emerald-500/40 hover:text-emerald-400 disabled:opacity-40">
             {loading
               ? <Loader2 size={14} className="animate-spin" />
               : <RefreshCw size={14} />
@@ -795,7 +859,7 @@ export default function HomePage() {
 
         {/* ── Skeleton grid ── */}
         {loading && (
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
             {Array.from({ length: 10 }).map((_, i) => <SkeletonCard key={i} />)}
           </div>
         )}
@@ -818,7 +882,7 @@ export default function HomePage() {
               )}
             </p>
 
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+            <div className="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
               {filtered.map((product, i) => (
                 <ProductCard key={product.id} product={product} rank={i} />
               ))}
@@ -836,7 +900,7 @@ export default function HomePage() {
               { emoji: "🔒", label_fr: "Paiement sécurisé",    label_ar: "دفع آمن",              label_en: "Secure payment"      },
             ].map((item) => (
               <div key={item.label_en}
-                className={"flex items-center gap-2.5 rounded-2xl border border-white/8 bg-white/5 p-3.5 shadow-sm " + (isRTL ? "flex-row-reverse" : "")}>
+                className={"flex items-center gap-2.5 rounded-2xl border border-white/10 bg-white/[0.04] p-3.5 transition-colors hover:border-green-700/25 hover:bg-white/[0.07] " + (isRTL ? "flex-row-reverse" : "")}>
                 <span className="text-2xl leading-none">{item.emoji}</span>
                 <span className={"text-xs font-semibold text-white/60 " + font}>
                   {language === "ar" ? item.label_ar : language === "fr" ? item.label_fr : item.label_en}
