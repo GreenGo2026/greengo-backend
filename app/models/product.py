@@ -18,6 +18,8 @@ class ProductResponse(BaseModel):
     image_url:    str  = ""
     image_status: str  = ""
     visible:      bool = False
+    on_sale:      bool  = False
+    discount_pct: int   = 0
 
 
 class UpdateProductRequest(BaseModel):

@@ -46,6 +46,8 @@ def _serialize(doc: dict[str, Any]) -> ProductResponse:
         image_url    = doc.get("image_url", ""),
         image_status = doc.get("image_status", ""),
         visible      = doc.get("visible", False),
+        on_sale      = bool(doc.get("on_sale", False)),
+        discount_pct = int(doc.get("discount_pct", 0)),
     )
 
 
