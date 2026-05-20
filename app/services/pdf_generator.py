@@ -13,7 +13,7 @@ from reportlab.lib.units import mm
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import (
-    HRFlowable, Paragraph, SimpleDocTemplate,
+    HRFlowable, Image, Paragraph, SimpleDocTemplate,
     Spacer, Table, TableStyle,
 )
 
@@ -63,8 +63,9 @@ def _reg(name: str, filename: str) -> bool:
 def _get_fonts() -> dict[str, str]:
     have_poppins_r = _reg("Poppins",      "Poppins-Regular.ttf")
     have_poppins_b = _reg("Poppins-Bold", "Poppins-Bold.ttf")
+    # Cairo variable font — register same file as both regular and bold
     have_cairo_r   = _reg("Cairo",        "Cairo-Regular.ttf")
-    have_cairo_b   = _reg("Cairo-Bold",   "Cairo-Bold.ttf")
+    have_cairo_b   = _reg("Cairo-Bold",   "Cairo-Regular.ttf")  # variable font works for bold too
     # Cairo is used as the universal table font because it renders
     # both Latin and Arabic glyphs — critical for mixed-language invoices.
     # Poppins is used only for headings/labels that are pure Latin/French/English.
@@ -194,7 +195,7 @@ def _styles(lang: str, f: dict[str, str]) -> dict[str, ParagraphStyle]:
         "th":      s("th",      fontName=uni_b, fontSize=8,  textColor=G_WHITE,  leading=11, alignment=TA_CENTER),
         # Table data cells — ALL use uni_r (Cairo) so Arabic product names render
         "td_c":    s("td_c",    fontName=uni_r, fontSize=9,  textColor=G_BLACK,  leading=12, alignment=TA_CENTER),
-        "td_l":    s("td_l",    fontName=uni_r, fontSize=9,  textColor=G_BLACK,  leading=12, alignment=n_aln),
+        "td_l":    s("td_l",    fontName=uni_r, fontSize=8,  textColor=G_BLACK,  leading=11, alignment=n_aln),
         "td_r":    s("td_r",    fontName=uni_r, fontSize=9,  textColor=G_BLACK,  leading=12, alignment=o_aln),
         # Total bar
         "tot_l":   s("tot_l",   fontName=uni_b, fontSize=11, textColor=G_WHITE,  leading=14, alignment=n_aln),
@@ -249,7 +250,17 @@ def generate_invoice_pdf(order_data: dict[str, Any], lang: str | None = None) ->
     els = []
 
     # ── 1. Header ─────────────────────────────────────────────────────────────
-    brand = _p("GreenGo Market", lang, st["brand"])
+    # Try to load logo image — fall back to text if not found
+    _logo_path = os.path.normpath(
+        os.path.join(os.path.dirname(__file__), "..", "..", "assets", "greengo-logo.png")
+    )
+    if os.path.exists(_logo_path):
+        try:
+            brand = Image(_logo_path, width=45*mm, height=15*mm, kind="proportional")
+        except Exception:
+            brand = _p("GreenGo Market", lang, st["brand"])
+    else:
+        brand = _p("GreenGo Market", lang, st["brand"])
     inv   = _p(_t(lang, "invoice"), lang, st["inv"])
     h_row = [[inv, brand]] if is_ar else [[brand, inv]]
     h_tbl = Table(h_row, colWidths=[pw * .55, pw * .45])
@@ -300,7 +311,7 @@ def generate_invoice_pdf(order_data: dict[str, Any], lang: str | None = None) ->
 
     # ── 3. Items table ────────────────────────────────────────────────────────
     items = order_data.get("items", [])
-    col_w = [pw*.37, pw*.12, pw*.11, pw*.19, pw*.21]
+    col_w = [pw*.42, pw*.11, pw*.10, pw*.18, pw*.19]
 
     def th(key: str) -> Paragraph:
         return _p(_t(lang, key), lang, st["th"])
@@ -311,15 +322,16 @@ def generate_invoice_pdf(order_data: dict[str, Any], lang: str | None = None) ->
 
     rows = []
     for item in items:
-        # Force FR/EN name — Arabic causes ????? in PDF
+        # Use name_fr first, fall back to name_ar (shaped via _shape for PDF)
         name = (
             item.get("name_fr")
             or item.get("name_en")
-            or item.get("name", "")
-            or item.get("item_name", "---")
+            or item.get("name")
+            or item.get("item_name")
+            or item.get("name_ar")
+            or "---"
         )
-        import re as _re
-        name = _re.sub(r"[؀-ۿ]+", "", str(name)).strip() or "---"
+        name = str(name).strip() or "---"
         qty   = float(item.get("quantity", 0))
         unit  = item.get("unit", "kg")
         ppu   = float(item.get("price_per_unit", 0))
@@ -342,8 +354,9 @@ def generate_invoice_pdf(order_data: dict[str, Any], lang: str | None = None) ->
         ("FONTSIZE",      (0, 0), (-1, -1),  9),
         ("ALIGN",         (0, 0), (-1, -1),  "CENTER"),
         ("VALIGN",        (0, 0), (-1, -1),  "MIDDLE"),
-        ("TOPPADDING",    (0, 0), (-1, -1),  7),
-        ("BOTTOMPADDING", (0, 0), (-1, -1),  7),
+        ("TOPPADDING",    (0, 0), (-1, -1),  6),
+        ("BOTTOMPADDING", (0, 0), (-1, -1),  6),
+        ("WORDWRAP",       (0, 0), (-1, -1),  1),
         ("LEFTPADDING",   (0, 0), ( 0, -1),  10),
         ("LINEBELOW",     (0, 0), (-1,  0),  1.5, G_DGREEN),
         ("LINEBELOW",     (0,-1), (-1, -1),  1.5, G_GREEN),
