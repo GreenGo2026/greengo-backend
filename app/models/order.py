@@ -1,4 +1,4 @@
-﻿# app/models/order.py
+# app/models/order.py
 """
 Order data models for GreenGo Market.
 
@@ -104,7 +104,7 @@ class OrderModel(BaseModel):
     # Optional metadata
     notes:            str        = Field("",  description="Internal admin note")
     livreur_name:     str        = Field("",  description="Name of the delivery person")
-    payment_method:   str        = Field("cash", description="cash | card | transfer")
+    payment_method:   str        = Field("COD",  description="COD | CARD_TPE")
     payment_confirmed: bool      = Field(False, description="True once livreur confirms cash received")
 
     @model_validator(mode="after")
@@ -206,7 +206,7 @@ class CreateOrderRequest(BaseModel):
     items:            list[OrderItem] = Field(..., min_length=1, description="At least one item required")
     total_price:      float           = Field(0.0, description="Client hint; backend overwrites from items")
     notes:            str             = Field("",  description="Optional customer note")
-    payment_method:   str             = Field("cash")
+    payment_method:   str             = Field("COD", description="COD | CARD_TPE")
 
 
 class UpdateOrderStatusRequest(BaseModel):
