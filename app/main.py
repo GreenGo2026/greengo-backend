@@ -45,6 +45,7 @@ from app.routes.orders   import router as orders_router
 from app.routes.webhook  import router as webhook_router
 from app.routes.storefront import router as storefront_router
 from app.routes.analytics import router as analytics_router
+from app.routes.feed      import router as feed_router
 
 # ---------------------------------------------------------------------------
 # New models imported directly from their modules (not via __init__)
