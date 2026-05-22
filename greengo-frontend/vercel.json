@@ -1,1 +1,31 @@
-{"rewrites":[{"source":"/sitemap.xml","destination":"https://web-production-0cdd6.up.railway.app/sitemap.xml"},{"source":"/api/(.*)","destination":"https://web-production-0cdd6.up.railway.app/api/$1"},{"source":"/(.*)","destination":"/index.html"}]}
+{
+  "rewrites": [
+    {
+      "source": "/sitemap.xml",
+      "destination": "https://web-production-0cdd6.up.railway.app/sitemap.xml"
+    },
+    {
+      "source": "/api/(.*)",
+      "destination": "https://web-production-0cdd6.up.railway.app/api/$1"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/menu",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store, no-cache, must-revalidate"
+        },
+        {
+          "key": "Vary",
+          "value": "Accept-Encoding"
+        }
+      ]
+    }
+  ]
+}

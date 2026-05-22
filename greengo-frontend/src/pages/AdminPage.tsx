@@ -7,24 +7,40 @@ import {
   MessageCircle, MapPin, Phone, Star, DollarSign,
   ChevronDown, ChevronUp, Bike, RefreshCw,
 } from "lucide-react";
+import PaniersTab from "./PaniersTab";
 import {
   updateProductById, updateOrderStatus, getOrders, getProducts,
   type DBProduct, type OrderStatus, type Order,
 } from "../services/api";
 
 const ADMIN_PIN = "greengo2026";
-type AdminTab = "orders" | "prices";
+
+// ── Status normalization ──────────────────────────────────────────────────────
+// MongoDB stores statuses in mixed case ("Out for Delivery", "Pending", etc.)
+// Frontend logic uses lowercase snake_case ("out_for_delivery", "pending")
+// This helper normalizes ANY format to lowercase snake_case consistently
+function normalizeStatus(raw: string | undefined | null): OrderStatus {
+  if (!raw) return "pending";
+  return raw
+    .toLowerCase()
+    .replace(/\s+/g, "_")        // "Out for Delivery" -> "out_for_delivery"
+    .replace(/-/g, "_")          // "out-for-delivery" -> "out_for_delivery"
+    .trim() as OrderStatus;
+}
+type AdminTab = "orders" | "prices" | "paniers";
 type Lang     = "fr" | "ar";
 
 interface EditableProduct extends DBProduct {
   edited_price:     number;
   edited_in_stock:  boolean;
+  edited_on_sale:   boolean;
+  edited_discount:  number;
   isDirty:          boolean;
   isSaving:         boolean;
   saveStatus:       "idle" | "success" | "error";
 }
 function toEditable(p: DBProduct): EditableProduct {
-  return { ...p, edited_price: p.price_mad, edited_in_stock: p.in_stock, isDirty: false, isSaving: false, saveStatus: "idle" };
+  return { ...p, edited_price: p.price_mad, edited_in_stock: p.in_stock, edited_on_sale: (p as any).on_sale ?? false, edited_discount: (p as any).discount_pct ?? 0, isDirty: false, isSaving: false, saveStatus: "idle" };
 }
 
 const I: Record<Lang, Record<string,string>> = {
@@ -167,8 +183,8 @@ function Timeline({status,lang}:{status:OrderStatus;lang:Lang}){
 }
 
 function OrderCard({order,lang,isOldest,onStatusChange,showToast,onRefresh}:{order:Order;lang:Lang;isOldest:boolean;onStatusChange:(id:string,s:OrderStatus)=>Promise<void>;showToast:(msg:string,type:ToastState["type"])=>void;onRefresh:()=>void;}){
-  const [expanded,setExpanded]=useState(order.status==="pending"||order.status==="out_for_delivery");
-  const [localStatus,setLocal]=useState<OrderStatus>((order.status?.toLowerCase() as OrderStatus)||"pending");
+  const [expanded,setExpanded]=useState(normalizeStatus(order.status)==="pending"||normalizeStatus(order.status)==="out_for_delivery");
+  const [localStatus,setLocal]=useState<OrderStatus>(normalizeStatus(order.status));
   const [loading,setLoading]=useState<OrderStatus|null>(null);
   const L=I[lang];const dir=lang==="ar"?"rtl":"ltr";const font=lang==="ar"?"font-arabic":"font-latin";
   const ago=minutesAgo(order.created_at);
@@ -208,6 +224,15 @@ function OrderCard({order,lang,isOldest,onStatusChange,showToast,onRefresh}:{ord
             </div>
             <div className={"flex items-center gap-3 flex-wrap "+(lang==="ar"?"flex-row-reverse":"")}>
               {order.customer_name&&<span className="text-xs font-bold text-gray-700">{order.customer_name}</span>}
+              {order.payment_method && (
+                <span className={"text-[9px] font-black px-1.5 py-0.5 rounded-full " + (
+                  order.payment_method === "CARD_TPE"
+                    ? "bg-blue-100 text-blue-700"
+                    : "bg-green-100 text-green-700"
+                )}>
+                  {order.payment_method === "CARD_TPE" ? "Carte TPE" : "Espèces"}
+                </span>
+              )}
               <div className={"flex items-center gap-1.5 "+(lang==="ar"?"flex-row-reverse":"")}><Phone size={11} className="text-[#2E8B57] shrink-0"/><span className="text-sm font-bold text-gray-700 font-latin">{order.customer_phone}</span></div>
               <div className={"flex items-center gap-1 "+(lang==="ar"?"flex-row-reverse":"")}><Clock size={10} className="text-gray-400"/><span className="text-xs text-gray-400 font-latin">{formatTs(order.created_at)}</span>{ago<120&&<span className="text-[10px] text-gray-400">({ago}min)</span>}</div>
             </div>
@@ -256,6 +281,33 @@ function PriceRow({item,rowIndex,totalRows,lang,onChange,onToggle,onSave,inputRe
       <td className="px-5 py-3.5"><div className="flex items-center gap-2"><input ref={inputRef} type="number" min="0" step="0.5" value={item.edited_price} onChange={e=>onChange(item.id,parseFloat(e.target.value)||0)} onKeyDown={e=>{if(e.key==="Enter"||e.key==="Tab"){e.preventDefault();onSave(item.id);const inputs=document.querySelectorAll<HTMLInputElement>(".price-input");const idx=Array.from(inputs).indexOf(e.currentTarget);const nxt=inputs[idx+1];if(nxt){nxt.focus();nxt.select();}}}} className={"price-input w-24 rounded-xl border-2 px-2 py-2 text-center text-sm font-bold outline-none transition-all font-latin "+(item.isDirty?"border-amber-300 bg-amber-50 text-amber-800 focus:border-[#2E8B57] focus:bg-white focus:ring-2 focus:ring-[#2E8B57]/20":"border-gray-200 bg-white text-gray-800 focus:border-[#2E8B57] focus:ring-2 focus:ring-[#2E8B57]/20")}/><span className="text-xs text-gray-400">MAD</span>{item.isDirty&&item.price_mad>0&&item.edited_price!==item.price_mad&&(<span className={"text-[10px] font-bold rounded-full px-1.5 py-0.5 "+(pct>0?"bg-red-100 text-red-600":"bg-emerald-100 text-emerald-700")}>{pct>0?"\u2191":"\u2193"}{Math.abs(pct).toFixed(0)}%</span>)}</div></td>
       <td className="px-5 py-3.5"><span className="text-xs font-semibold text-gray-400 font-latin">{item.unit||"—"}</span></td>
       <td className="px-5 py-3.5"><button onClick={()=>onToggle(item.id)} className="flex items-center gap-2 rounded-xl px-2 py-1 transition-all hover:bg-gray-100">{item.edited_in_stock?<><ToggleRight size={22} className="text-[#2E8B57]"/><span className={"text-xs font-bold text-[#2E8B57] "+font}>{L.in_stock}</span></>:<><ToggleLeft size={22} className="text-gray-300"/><span className={"text-xs font-bold text-gray-400 "+font}>{L.out_stock}</span></>}</button></td>
+      <td className="px-5 py-3.5">
+        <button onClick={()=>onToggleSale(item.id)}
+          className={"flex items-center gap-2 rounded-xl px-2 py-1.5 transition-all border "+(
+            item.edited_on_sale
+              ? "bg-amber-50 border-amber-200 hover:bg-amber-100"
+              : "bg-gray-50 border-gray-200 hover:bg-gray-100"
+          )}>
+          {item.edited_on_sale
+            ? <><ToggleRight size={20} className="text-amber-500 shrink-0"/><span className="text-xs font-extrabold text-amber-600 whitespace-nowrap">ON</span></>
+            : <><ToggleLeft size={20} className="text-gray-400 shrink-0"/><span className="text-xs font-bold text-gray-400 whitespace-nowrap">OFF</span></>}
+        </button>
+      </td>
+      <td className="px-3 py-3.5">
+        {item.edited_on_sale ? (
+          <div className="flex items-center gap-1">
+            <input
+              type="number" min="0" max="99" step="1"
+              value={item.edited_discount}
+              onChange={e=>onDiscountChange(item.id, parseFloat(e.target.value)||0)}
+              className="w-14 rounded-xl border-2 border-amber-300 bg-amber-50 px-2 py-2 text-center text-sm font-bold text-amber-800 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-200 font-latin"
+            />
+            <span className="text-xs text-gray-400 font-latin">%</span>
+          </div>
+        ) : (
+          <span className="text-xs text-gray-200 font-latin px-2">—</span>
+        )}
+      </td>
       <td className="px-5 py-3.5">{item.saveStatus==="success"?<span className={"flex items-center gap-1 text-xs font-bold text-[#2E8B57] "+font}><CheckCircle size={13}/>{L.saved_lbl}</span>:item.saveStatus==="error"?<span className={"flex items-center gap-1 text-xs font-bold text-red-500 "+font}><AlertCircle size={13}/>{L.failed_lbl}</span>:(<button onClick={()=>onSave(item.id)} disabled={!item.isDirty||item.isSaving} className={"flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold text-white transition-all "+font+" "+(item.isDirty&&!item.isSaving?"shadow-sm active:scale-95":"cursor-not-allowed bg-gray-200 text-gray-400")} style={item.isDirty&&!item.isSaving?{background:"linear-gradient(135deg,#2E8B57,#1a6b42)"}:{}}>{item.isSaving?<Loader2 size={11} className="animate-spin"/>:<Save size={11}/>}{item.isSaving?L.saving_btn:L.save_btn}</button>)}</td>
       <td className="px-2 py-3.5 text-center"><span className="text-[10px] font-mono text-gray-300">{rowIndex+1}/{totalRows}</span></td>
     </tr>
@@ -276,6 +328,7 @@ export default function AdminPage() {
   const [orders,setOrders]                   = useState<Order[]>([]);
   const [ordersLoading,setOrdersLoading]     = useState(false);
   const [ordersError,setOrdersError]         = useState("");
+  const [promoFilter,setPromoFilter]         = useState<"all"|"promo">("all");
   const [statusFilter,setStatusFilter]       = useState<OrderStatus|"all">("all");
   const [lastSync,setLastSync]               = useState("");
   const [products,setProducts]               = useState<EditableProduct[]>([]);
@@ -300,21 +353,23 @@ export default function AdminPage() {
   },[L.error_products]);
 
   useEffect(()=>{if(unlocked&&activeTab==="orders")fetchOrders();},[unlocked,activeTab,fetchOrders]);
-  useEffect(()=>{if(unlocked&&activeTab==="prices")fetchProducts();},[unlocked,activeTab,fetchProducts]);
+  useEffect(()=>{if(unlocked&&(activeTab==="prices"||activeTab==="paniers"))fetchProducts();},[unlocked,activeTab,fetchProducts]);
 
   async function handleStatusChange(id:string,status:OrderStatus){await updateOrderStatus(id,status);setOrders(prev=>prev.map(o=>o.id===id?{...o,status}:o));}
-  function handlePriceChange(id:string,val:number){setProducts(prev=>prev.map(p=>p.id===id?{...p,edited_price:val,isDirty:val!==p.price_mad||p.edited_in_stock!==p.in_stock,saveStatus:"idle"}:p));}
+  function handlePriceChange(id:string,val:number){setProducts(prev=>prev.map(p=>p.id===id?{...p,edited_price:val,isDirty:val!==p.price_mad||p.edited_in_stock!==p.in_stock||p.edited_on_sale!==((p as any).on_sale??false)||p.edited_discount!==((p as any).discount_pct??0),saveStatus:"idle"}:p));}
+  function handleToggleOnSale(id:string){setProducts(prev=>prev.map(p=>p.id===id?{...p,edited_on_sale:!p.edited_on_sale,isDirty:true,saveStatus:"idle"}:p));}
+  function handleDiscountChange(id:string,val:number){setProducts(prev=>prev.map(p=>p.id===id?{...p,edited_discount:Math.max(0,Math.min(99,val)),isDirty:true,saveStatus:"idle"}:p));}
   function handleToggleStock(id:string){setProducts(prev=>prev.map(p=>p.id===id?{...p,edited_in_stock:!p.edited_in_stock,isDirty:true,saveStatus:"idle"}:p));}
   async function handleSave(id:string){
     const item=products.find(p=>p.id===id);if(!item||!item.isDirty)return;
     setProducts(prev=>prev.map(p=>p.id===id?{...p,isSaving:true}:p));
-    try{const r=await updateProductById(id,{price_mad:item.edited_price,in_stock:item.edited_in_stock});setProducts(prev=>prev.map(p=>p.id===id?{...p,...toEditable(r),isDirty:false,isSaving:false,saveStatus:"success"}:p));setTimeout(()=>setProducts(prev=>prev.map(p=>p.id===id?{...p,saveStatus:"idle"}:p)),3000);}
+    try{const r=await updateProductById(id,{price_mad:item.edited_price,in_stock:item.edited_in_stock,on_sale:item.edited_on_sale,discount_pct:item.edited_discount} as any);setProducts(prev=>prev.map(p=>p.id===id?{...p,...toEditable(r),isDirty:false,isSaving:false,saveStatus:"success"}:p));setTimeout(()=>setProducts(prev=>prev.map(p=>p.id===id?{...p,saveStatus:"idle"}:p)),3000);}
     catch{setProducts(prev=>prev.map(p=>p.id===id?{...p,isSaving:false,saveStatus:"error"}:p));}
   }
   async function handlePublishAll(){
     const dirty=products.filter(p=>p.isDirty);if(dirty.length===0){showToast(L.toast_no_dirty,"info");return;}
     setPublishing(true);let saved=0,failed=0;
-    for(const item of dirty){try{const r=await updateProductById(item.id,{price_mad:item.edited_price,in_stock:item.edited_in_stock});setProducts(prev=>prev.map(p=>p.id===item.id?{...p,...toEditable(r),isDirty:false,isSaving:false,saveStatus:"success"}:p));saved++;}catch{failed++;}}
+    for(const item of dirty){try{const r=await updateProductById(item.id,{price_mad:item.edited_price,in_stock:item.edited_in_stock,on_sale:item.edited_on_sale,discount_pct:item.edited_discount} as any);setProducts(prev=>prev.map(p=>p.id===item.id?{...p,...toEditable(r),isDirty:false,isSaving:false,saveStatus:"success"}:p));saved++;}catch{failed++;}}
     setPublishing(false);
     if(failed===0)showToast("\u2705 "+saved+L.toast_saved,"success");else showToast("\u26a0\ufe0f "+saved+L.toast_partial+" "+failed+L.toast_failed,"error");
     setTimeout(()=>setProducts(prev=>prev.map(p=>({...p,saveStatus:"idle"}))),3500);
@@ -328,9 +383,9 @@ export default function AdminPage() {
     {value:"delivered",label:L.status_delivered},{value:"completed",label:L.status_completed},
     {value:"cancelled",label:L.status_cancelled},
   ];
-  const pendingCount=orders.filter(o=>o.status==="pending").length;
+  const pendingCount=orders.filter(o=>normalizeStatus(o.status)==="pending").length;
   const dirtyCount=products.filter(p=>p.isDirty).length;
-  const oldestPendingId=[...orders].filter(o=>o.status==="pending").sort((a,b)=>new Date(a.created_at).getTime()-new Date(b.created_at).getTime())[0]?.id;
+  const oldestPendingId=[...orders].filter(o=>normalizeStatus(o.status)==="pending").sort((a,b)=>new Date(a.created_at).getTime()-new Date(b.created_at).getTime())[0]?.id;
 
   return(
     <div className={"min-h-screen "+font} style={{background:"linear-gradient(160deg,#f0fdf4 0%,#f8fafc 40%,#FAF7F2 100%)"}}>
@@ -341,10 +396,10 @@ export default function AdminPage() {
           <div className={"flex items-center gap-3 "+(lang==="ar"?"flex-row-reverse":"")}>
             <LangToggle lang={lang} setLang={setLang}/>
             <div className="flex items-center gap-0.5 rounded-xl border border-white/10 bg-white/5 p-1">
-              {(["orders","prices"]as AdminTab[]).map(tab=>(
+              {(["orders","prices","paniers"]as AdminTab[]).map(tab=>(
                 <button key={tab} onClick={()=>setActiveTab(tab)} className={"relative flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-bold transition-all "+(activeTab===tab?"bg-[#2E8B57] text-white":"text-white/50 hover:text-white")}>
-                  {tab==="orders"?<ShoppingBag size={12}/>:<TrendingUp size={12}/>}
-                  {tab==="orders"?L.tab_orders:L.tab_prices}
+                  {tab==="orders"?<ShoppingBag size={12}/>:tab==="prices"?<TrendingUp size={12}/>:<Package size={12}/>}
+                  {tab==="orders"?L.tab_orders:tab==="prices"?L.tab_prices:"Paniers"}
                   {tab==="orders"&&pendingCount>0&&<span className="flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-amber-400 px-1 text-[10px] font-extrabold text-white">{pendingCount}</span>}
                   {tab==="prices"&&dirtyCount>0&&<span className="flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-orange-400 px-1 text-[10px] font-extrabold text-white">{dirtyCount}</span>}
                 </button>
@@ -375,11 +430,23 @@ export default function AdminPage() {
             {!productsLoading&&!productsError&&products.length>0&&(
               <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
                 <div className={"flex items-center justify-between border-b border-gray-100 bg-gray-50 px-5 py-3 "+(lang==="ar"?"flex-row-reverse":"")}><p className={"text-xs font-extrabold uppercase tracking-widest text-gray-400 "+font}>{L.price_manager}</p><p className="hidden text-[10px] text-gray-400 md:block"><kbd className="rounded bg-white px-1.5 py-0.5 font-mono text-[10px] shadow-sm ring-1 ring-gray-200">Tab</kbd>{" / "}<kbd className="rounded bg-white px-1.5 py-0.5 font-mono text-[10px] shadow-sm ring-1 ring-gray-200">Enter</kbd>{" \u2014 "}{L.kbd_hint}</p></div>
-                <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className={"border-b border-gray-100 bg-gray-50/50 text-[10px] font-extrabold uppercase tracking-widest text-gray-400 "+(lang==="ar"?"text-right":"")} dir={dir}><th className="px-5 py-3">{L.product}</th><th className="px-5 py-3">{L.curr_price}</th><th className="px-5 py-3">{L.new_price}</th><th className="px-5 py-3">{L.unit_lbl}</th><th className="px-5 py-3">{L.stock_lbl}</th><th className="px-5 py-3">{L.action_lbl}</th><th className="px-2 py-3"></th></tr></thead><tbody>{products.map((item,i)=>(<PriceRow key={item.id} item={item} rowIndex={i} totalRows={products.length} lang={lang} onChange={handlePriceChange} onToggle={handleToggleStock} onSave={handleSave} inputRef={el=>inputRefs.current.set(item.id,el)}/>))}</tbody></table></div>
+                <div className="flex items-center gap-2 mb-4 flex-wrap">
+              <span className={"text-xs font-semibold text-gray-500 " + font}>Afficher:</span>
+              {(["all","promo"] as const).map(key=>(
+                <button key={key} onClick={()=>setPromoFilter(key)}
+                  className={"rounded-full px-3 py-1.5 text-xs font-bold transition-all " + (promoFilter===key ? "bg-amber-500 text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200")}>
+                  {key==="all" ? "Tous" : "Promotions actives"}
+                  {key==="promo"&&<span className="ml-1 font-latin">{products.filter((p:any)=>p.on_sale).length}</span>}
+                </button>
+              ))}
+            </div>
+            <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className={"border-b border-gray-100 bg-gray-50/50 text-[10px] font-extrabold uppercase tracking-widest text-gray-400 "+(lang==="ar"?"text-right":"")} dir={dir}><th className="px-5 py-3">{L.product}</th><th className="px-5 py-3">{L.curr_price}</th><th className="px-5 py-3">{L.new_price}</th><th className="px-5 py-3">{L.unit_lbl}</th><th className="px-5 py-3">{L.stock_lbl}</th><th className="px-5 py-3"><span className="text-amber-400">Promo</span></th><th className="px-3 py-3"><span className="text-amber-400">Remise</span></th><th className="px-5 py-3">{L.action_lbl}</th><th className="px-2 py-3"></th></tr></thead><tbody>{(promoFilter==="promo"?products.filter((p:any)=>p.on_sale):products).map((item,i)=>(<PriceRow key={item.id} item={item} rowIndex={i} totalRows={products.length} lang={lang} onChange={handlePriceChange} onToggle={handleToggleStock} onToggleSale={handleToggleOnSale} onDiscountChange={handleDiscountChange} onSave={handleSave} inputRef={el=>inputRefs.current.set(item.id,el)}/>))}</tbody></table></div>
               </div>
             )}
+          {activeTab==="paniers"&&<PaniersTab products={products} lang={lang} font={font}/>}
           </div>
-        )}
+        )
+}
       </div>
     </div>
   );
