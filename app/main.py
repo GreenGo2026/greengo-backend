@@ -573,6 +573,7 @@ app.include_router(orders_router)
 app.include_router(webhook_router)
 app.include_router(storefront_router)
 app.include_router(analytics_router)
+app.include_router(feed_router)
 
 
 # ===========================================================================
