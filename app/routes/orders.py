@@ -210,6 +210,28 @@ async def update_order_status(
     return {"order_id": order_id, "status": final_status, "updated": True}
 
 
+
+@router.get("/{order_id}", summary="Get single order by ID")
+async def get_order(order_id: str) -> dict[str, Any]:
+    col = orders_col()
+    doc = None
+    # Try ObjectId first
+    try:
+        doc = await col.find_one({"_id": ObjectId(order_id)})
+    except Exception:
+        pass
+    # Fallback: string _id
+    if doc is None:
+        doc = await col.find_one({"_id": order_id})
+    if doc is None:
+        raise HTTPException(status_code=404, detail="Order not found")
+    doc["_id"] = str(doc["_id"])
+    if isinstance(doc.get("created_at"), datetime):
+        doc["created_at"] = doc["created_at"].isoformat()
+    if isinstance(doc.get("updated_at"), datetime):
+        doc["updated_at"] = doc["updated_at"].isoformat()
+    return doc
+
 @router.get("/{order_id}/invoice", summary="Download PDF invoice for an order")
 async def download_invoice(order_id: str):
     from app.database import whatsapp_orders_col
