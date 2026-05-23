@@ -48,6 +48,7 @@ def _serialize(doc: dict[str, Any]) -> ProductResponse:
         visible      = doc.get("visible", False),
         on_sale      = bool(doc.get("on_sale", False)),
         discount_pct = int(doc.get("discount_pct", 0)),
+        description_fr = str(doc.get("description_fr", "")),
     )
 
 

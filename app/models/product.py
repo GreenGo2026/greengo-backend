@@ -20,6 +20,7 @@ class ProductResponse(BaseModel):
     visible:      bool = False
     on_sale:      bool  = False
     discount_pct: int   = 0
+    description_fr: str = ""
 
 
 class UpdateProductRequest(BaseModel):
