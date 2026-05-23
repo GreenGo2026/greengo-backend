@@ -153,7 +153,13 @@ async def create_order(payload: CreateOrderPayload) -> OrderResponse:
 @router.get("", summary="List all orders (admin)")
 async def list_orders(limit: int = 50, phone: str | None = None) -> list[dict[str, Any]]:
     col  = orders_col()
-    docs = await col.find().sort("created_at", -1).limit(limit).to_list(length=limit)
+    query: dict = {}
+    if phone:
+        p = phone.strip()
+        if p.startswith("0") and len(p) == 10:
+            p = "+212" + p[1:]
+        query = {"$or": [{"phone": p}, {"phone": phone.strip()}]}
+    docs = await col.find(query).sort("created_at", -1).limit(limit).to_list(length=limit)
     for d in docs:
         d["_id"] = str(d["_id"])
         if isinstance(d.get("created_at"), datetime):
