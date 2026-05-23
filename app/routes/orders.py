@@ -151,7 +151,7 @@ async def create_order(payload: CreateOrderPayload) -> OrderResponse:
 
 
 @router.get("", summary="List all orders (admin)")
-async def list_orders(limit: int = 50) -> list[dict[str, Any]]:
+async def list_orders(limit: int = 50, phone: str | None = None) -> list[dict[str, Any]]:
     col  = orders_col()
     docs = await col.find().sort("created_at", -1).limit(limit).to_list(length=limit)
     for d in docs:
