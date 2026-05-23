@@ -46,6 +46,7 @@ from app.routes.webhook  import router as webhook_router
 from app.routes.storefront import router as storefront_router
 from app.routes.analytics import router as analytics_router
 from app.routes.feed      import router as feed_router
+from app.routes.geocode   import router as geocode_router
 
 # ---------------------------------------------------------------------------
 # New models imported directly from their modules (not via __init__)
@@ -574,6 +575,7 @@ app.include_router(webhook_router)
 app.include_router(storefront_router)
 app.include_router(analytics_router)
 app.include_router(feed_router)
+app.include_router(geocode_router)
 
 
 # ===========================================================================
