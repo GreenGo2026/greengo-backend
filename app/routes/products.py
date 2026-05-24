@@ -138,6 +138,12 @@ async def update_product(
         updates["unit"] = payload.unit
     if payload.category is not None:
         updates["category"] = payload.category
+    if payload.description_fr is not None:
+        updates["description_fr"] = payload.description_fr.strip()
+    if payload.on_sale is not None:
+        updates["on_sale"] = payload.on_sale
+    if payload.discount_pct is not None:
+        updates["discount_pct"] = payload.discount_pct
 
     if len(updates) == 1:  # only updated_at — nothing useful provided
         raise HTTPException(status_code=400, detail="Provide at least one field to update.")
