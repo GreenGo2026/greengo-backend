@@ -96,6 +96,8 @@ async def create_order(payload: CreateOrderPayload) -> OrderResponse:
 
     # ── 2. Loyalty — upsert customer & accumulate points ──────────────────────
     earned_points = _calculate_points(payload.total_price)
+    points_to_deduct = payload.points_used if payload.use_points and payload.points_used > 0 else 0
+    net_points_delta  = earned_points - points_to_deduct
     phone_key     = payload.phone.strip()
 
     try:
@@ -107,7 +109,7 @@ async def create_order(payload: CreateOrderPayload) -> OrderResponse:
                     "name":        payload.customer_name.strip(),
                     "created_at":  now,
                 },
-                "$inc":  {"total_points": earned_points},
+                "$inc":  {"total_points": net_points_delta},
                 "$set":  {
                     "last_order_id": order_id,
                     "updated_at":    now,
