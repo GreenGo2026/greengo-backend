@@ -32,6 +32,8 @@ class CreateOrderPayload(BaseModel):
     customer_name: str
     phone: str = Field(validation_alias=AliasChoices("phone", "customer_phone"))
     customer_phone: str | None = None
+    use_points:    bool = False
+    points_used:   int  = 0
     address: str = Field(validation_alias=AliasChoices("address", "delivery_address"))
     gps_coordinates: GPSCoordinates | None = None
     items: list[OrderItem]
@@ -112,10 +114,11 @@ async def create_order(payload: CreateOrderPayload) -> OrderResponse:
                 },
                 "$push": {
                     "orders": {
-                        "order_id":     order_id,
-                        "total_price":  round(payload.total_price, 2),
+                        "order_id":      order_id,
+                        "total_price":   round(payload.total_price, 2),
                         "points_earned": earned_points,
-                        "date":         now,
+                        "points_used":   points_to_deduct,
+                        "date":          now,
                     }
                 },
             },
