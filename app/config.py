@@ -29,6 +29,12 @@ class Settings(BaseSettings):
     TWILIO_AUTH_TOKEN:    str = ""
     TWILIO_WHATSAPP_FROM: str = "whatsapp:+14155238886"
 
+    # ── Admin security ───────────────────────────────────────────────────────
+    ADMIN_API_KEY:       str = ""
+    JWT_SECRET:          str = ""
+    ADMIN_PASSWORD_HASH: str = ""   # bcrypt hash — never store plaintext
+    ADMIN_TOTP_SECRET:   str = ""   # base32 TOTP secret for Google Authenticator
+
     # ── Application ──────────────────────────────────────────────────────────
     APP_ENV:   str  = "development"
     APP_DEBUG: bool = False
@@ -56,6 +62,11 @@ class Settings(BaseSettings):
     @classmethod
     def strip_twilio(cls, v: str) -> str:
         return str(v).strip().strip('"').strip("'").strip()
+
+    @field_validator("APP_ENV", mode="before")
+    @classmethod
+    def strip_app_env(cls, v: str) -> str:
+        return str(v).strip().strip('"').strip("'").strip().lower()
 
     # ── Convenience helpers ──────────────────────────────────────────────────
 

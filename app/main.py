@@ -38,16 +38,18 @@ from twilio.twiml.messaging_response import MessagingResponse
 # ---------------------------------------------------------------------------
 # Internal — database only
 # ---------------------------------------------------------------------------
+from app.auth import require_admin
 from app.config import get_settings
 from app.database import close_db, connect_db, orders_col, products_col, whatsapp_orders_col
 from app.routes.products import router as products_router
 from app.routes.orders   import router as orders_router
 from app.routes.webhook  import router as webhook_router
-from app.routes.storefront import router as storefront_router
-from app.routes.analytics import router as analytics_router
-from app.routes.feed      import router as feed_router
-from app.routes.geocode   import router as geocode_router
-from app.routes.customers import router as customers_router
+from app.routes.storefront  import router as storefront_router
+from app.routes.analytics  import router as analytics_router
+from app.routes.feed       import router as feed_router
+from app.routes.geocode    import router as geocode_router
+from app.routes.customers  import router as customers_router
+from app.routes.admin_auth import router as admin_auth_router
 
 # ---------------------------------------------------------------------------
 # New models imported directly from their modules (not via __init__)
@@ -464,6 +466,14 @@ async def _do_update_order_status(order_id: str, new_status: OrderStatus) -> dic
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     if not _settings.GEMINI_API_KEY:
         raise RuntimeError("GEMINI_API_KEY is empty. Check your .env file.")
+    if not _settings.ADMIN_API_KEY:
+        raise RuntimeError("ADMIN_API_KEY is empty. Check your .env file — admin endpoints are unprotected.")
+    if not _settings.JWT_SECRET:
+        raise RuntimeError("JWT_SECRET is empty. Check your .env file — admin JWT sessions are broken.")
+    if not _settings.ADMIN_PASSWORD_HASH:
+        print("WARNING: ADMIN_PASSWORD_HASH not set — 2FA login disabled. Run setup_admin_credentials.py to configure.")
+    if not _settings.ADMIN_TOTP_SECRET:
+        print("WARNING: ADMIN_TOTP_SECRET not set — 2FA login disabled. Run setup_admin_credentials.py to configure.")
     if not _TWILIO_AUTH_TOKEN:
         print("WARNING: TWILIO_AUTH_TOKEN not set — webhook will reject all requests.")
     print(f"STARTUP: Catalog items loaded -> {len(_CATALOG)}")
@@ -479,8 +489,8 @@ app = FastAPI(
     title="GreenGo Market API",
     version="2.0.0",
     lifespan=lifespan,
-    docs_url  = None if _settings.is_production else "/docs",
-    redoc_url = None if _settings.is_production else "/redoc",
+    docs_url  = None,   # disabled in all environments — schema still at /openapi.json
+    redoc_url = None,
 )
 
 
@@ -499,7 +509,7 @@ app.add_middleware(
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
+    allow_headers=["Content-Type", "Authorization", "X-Requested-With", "X-Admin-Key"],
     expose_headers=["Content-Disposition"],
 )
 
@@ -516,6 +526,7 @@ class SecurityHeadersMiddleware(_BaseMiddleware):
         response.headers["X-XSS-Protection"]          = "1; mode=block"
         response.headers["Referrer-Policy"]           = "strict-origin-when-cross-origin"
         response.headers["Permissions-Policy"]        = "geolocation=(), microphone=(), camera=()"
+        response.headers["Content-Security-Policy"]   = "default-src 'none'; frame-ancestors 'none';"
         if _os.getenv("APP_ENV") == "production":
             response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         return response
@@ -570,6 +581,7 @@ app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(RateLimitMiddleware)
 app.add_middleware(MaxBodySizeMiddleware)
 
+app.include_router(admin_auth_router)
 app.include_router(products_router)
 app.include_router(orders_router)
 app.include_router(webhook_router)
@@ -618,7 +630,7 @@ async def get_catalog(
 
 
 @app.patch("/api/v1/catalog", tags=["Catalog"])
-async def update_catalog_item(payload: CatalogItemUpdate) -> dict:
+async def update_catalog_item(payload: CatalogItemUpdate, _: None = Depends(require_admin)) -> dict:
     """
     Update price/availability for one product.
     product_name is in the JSON body — never in the URL path —
@@ -663,6 +675,7 @@ async def update_catalog_item(payload: CatalogItemUpdate) -> dict:
 async def get_admin_orders(
     status: Optional[str] = Query(default=None),
     limit:  int           = Query(default=50, ge=1, le=500),
+    _:      None          = Depends(require_admin),
 ) -> list[OrderResponse]:
     try:
         pipeline: list[dict[str, Any]] = []
@@ -719,7 +732,7 @@ async def invoice_preflight(order_id: str):
     )
 
 @app.get("/api/v1/orders/{order_id}/invoice", tags=["Orders"])
-async def download_invoice(order_id: str):
+async def download_invoice(order_id: str, _: None = Depends(require_admin)):
     """Generate and download a PDF invoice for a given order."""
     import io
     from fastapi.responses import StreamingResponse
@@ -860,16 +873,16 @@ async def sitemap():
     )
 
 # ---------------------------------------------------------------------------
-# Legacy routes
+# Legacy routes — protected by admin key
 # ---------------------------------------------------------------------------
 @app.post("/products/", status_code=201, tags=["Legacy"])
-async def legacy_create_product(payload: LegacyProductCreate) -> dict:
+async def legacy_create_product(payload: LegacyProductCreate, _: None = Depends(require_admin)) -> dict:
     result = await products_col().insert_one(payload.model_dump())
     return {"message": "Product created.", "_id": str(result.inserted_id)}
 
 
 @app.get("/products/", tags=["Legacy"])
-async def legacy_list_products() -> list[dict]:
+async def legacy_list_products(_: None = Depends(require_admin)) -> list[dict]:
     cursor   = products_col().find({}, {"_id": 1, "name": 1, "price": 1, "category": 1, "stock": 1})
     products = await cursor.to_list(length=200)
     for p in products:
@@ -878,13 +891,13 @@ async def legacy_list_products() -> list[dict]:
 
 
 @app.post("/orders/", status_code=201, tags=["Legacy"])
-async def legacy_create_order(payload: LegacyOrderCreate) -> dict:
+async def legacy_create_order(payload: LegacyOrderCreate, _: None = Depends(require_admin)) -> dict:
     result = await orders_col().insert_one(payload.model_dump())
     return {"message": "Order created.", "_id": str(result.inserted_id)}
 
 
 @app.get("/orders/", tags=["Legacy"])
-async def legacy_list_orders() -> list[dict]:
+async def legacy_list_orders(_: None = Depends(require_admin)) -> list[dict]:
     cursor = orders_col().find({}).sort("created_at", -1)
     orders = await cursor.to_list(length=500)
     for o in orders:
@@ -893,7 +906,7 @@ async def legacy_list_orders() -> list[dict]:
 
 
 @app.get("/whatsapp-orders/", tags=["Legacy"])
-async def legacy_list_whatsapp_orders() -> list[dict]:
+async def legacy_list_whatsapp_orders(_: None = Depends(require_admin)) -> list[dict]:
     cursor = whatsapp_orders_col().find({}).sort("created_at", -1)
     orders = await cursor.to_list(length=500)
     for o in orders:
