@@ -10,20 +10,14 @@ FROM python:3.11-slim
 
 # Keeps Python output unbuffered so container logs appear in real-time
 ENV PYTHONUNBUFFERED=1 \
-    # Prevent Python from writing .pyc files into the image layer
     PYTHONDONTWRITEBYTECODE=1 \
-    # Tell pip not to use a cache dir (saves ~50 MB in the final image)
     PIP_NO_CACHE_DIR=1 \
-    # Silence the pip version nag
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
 WORKDIR /app
 
 # ── Install dependencies ──────────────────────────────────────────────────────
-# Copy only the requirements file first so Docker can cache this layer
-# independently of application code changes.
 COPY requirements.txt .
-
 RUN pip install --no-cache-dir -r requirements.txt
 
 # ── Copy application code ─────────────────────────────────────────────────────
@@ -33,17 +27,12 @@ COPY . .
 # ── Expose port ───────────────────────────────────────────────────────────────
 EXPOSE 8000
 
-# ── Health-check (optional but useful for Railway / ECS / Fly.io) ─────────────
-# Polls the root health endpoint every 30 s; 3 consecutive failures = unhealthy.
+# ── Health-check ──────────────────────────────────────────────────────────────
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/')" \
     || exit 1
 
 # ── Start server ──────────────────────────────────────────────────────────────
-# --workers 1  → single process; scale horizontally via replicas in prod
-# --host 0.0.0.0 → listen on all interfaces inside the container
-# --port 8000    → matches EXPOSE above
-CMD ["uvicorn", "app.main:app", \
-     "--host", "0.0.0.0", \
-     "--port", "8000", \
-     "--workers", "1"]
+# Railway injects $PORT at runtime — fall back to 8000 for local docker run.
+# All secrets arrive via Railway env vars at container start, never at build time.
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1"]
