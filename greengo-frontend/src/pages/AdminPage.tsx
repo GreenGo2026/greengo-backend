@@ -1,4 +1,4 @@
-﻿// src/pages/AdminPage.tsx
+// src/pages/AdminPage.tsx
 import { useEffect, useState, useRef, useCallback } from "react";
 import {
   Save, AlertCircle, CheckCircle, Loader2, Lock,
@@ -12,8 +12,9 @@ import {
   updateProductById, updateOrderStatus, getOrders, getProducts,
   type DBProduct, type OrderStatus, type Order,
 } from "../services/api";
-
-const ADMIN_PIN = "greengo2026";
+import {
+  clearJwt, isAdminLoggedIn, loginAdmin,
+} from "../services/adminJwt";
 
 // ── Status normalization ──────────────────────────────────────────────────────
 // MongoDB stores statuses in mixed case ("Out for Delivery", "Pending", etc.)
@@ -34,13 +35,14 @@ interface EditableProduct extends DBProduct {
   edited_price:     number;
   edited_in_stock:  boolean;
   edited_on_sale:   boolean;
-  edited_discount:  number;
+  edited_discount:    number;
+  edited_description: string;
   isDirty:          boolean;
   isSaving:         boolean;
   saveStatus:       "idle" | "success" | "error";
 }
 function toEditable(p: DBProduct): EditableProduct {
-  return { ...p, edited_price: p.price_mad, edited_in_stock: p.in_stock, edited_on_sale: (p as any).on_sale ?? false, edited_discount: (p as any).discount_pct ?? 0, isDirty: false, isSaving: false, saveStatus: "idle" };
+  return { ...p, edited_price: p.price_mad, edited_in_stock: p.in_stock, edited_on_sale: (p as any).on_sale ?? false, edited_discount: (p as any).discount_pct ?? 0, edited_description: String((p as any).description_fr ?? ""), isDirty: false, isSaving: false, saveStatus: "idle" };
 }
 
 const I: Record<Lang, Record<string,string>> = {
@@ -276,7 +278,8 @@ function PriceRow({item,rowIndex,totalRows,lang,onChange,onToggle,onSave,inputRe
   const pct=item.isDirty&&item.price_mad>0?((item.edited_price-item.price_mad)/item.price_mad*100):0;
   return(
     <tr className={"border-b border-gray-100 transition-all "+(item.isDirty?"bg-amber-50/50":"bg-white hover:bg-emerald-50/20")}>
-      <td className="px-5 py-3.5"><div className="flex items-center gap-3"><div className={"flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-xl "+cs.bg}>{cs.emoji}</div><div><p dir="rtl" className="font-bold text-gray-800 text-sm font-arabic">{item.name_ar}</p>{item.name_fr&&<p className="text-[10px] text-gray-400 font-latin">{item.name_fr}</p>}<span className={"mt-0.5 inline-block rounded-full px-2 py-0.5 text-[9px] font-bold "+cs.bg+" "+cs.text}>{item.category}</span></div></div></td>
+      <td className="px-5 py-3.5"><div className="flex items-center gap-3"><div className={"flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-xl "+cs.bg}>{cs.emoji}</div><div><p dir="rtl" className="font-bold text-gray-800 text-sm font-arabic">{item.name_ar}</p>
+                <textarea value={item.edited_description} onChange={e=>handleDescriptionChange(item.id,e.target.value)} rows={1} placeholder="Description..." className={"mt-1 w-full rounded-lg border px-2 py-1 text-[10px] text-gray-600 outline-none resize-none "+(item.isDirty&&item.edited_description!==String((item as any).description_fr??"")?"border-amber-300 bg-amber-50":"border-gray-100 bg-gray-50")} style={{minWidth:160}} />{item.name_fr&&<p className="text-[10px] text-gray-400 font-latin">{item.name_fr}</p>}<span className={"mt-0.5 inline-block rounded-full px-2 py-0.5 text-[9px] font-bold "+cs.bg+" "+cs.text}>{item.category}</span></div></div></td>
       <td className="px-5 py-3.5"><span className="text-sm font-semibold text-gray-400 font-latin">{item.price_mad.toFixed(2)}</span></td>
       <td className="px-5 py-3.5"><div className="flex items-center gap-2"><input ref={inputRef} type="number" min="0" step="0.5" value={item.edited_price} onChange={e=>onChange(item.id,parseFloat(e.target.value)||0)} onKeyDown={e=>{if(e.key==="Enter"||e.key==="Tab"){e.preventDefault();onSave(item.id);const inputs=document.querySelectorAll<HTMLInputElement>(".price-input");const idx=Array.from(inputs).indexOf(e.currentTarget);const nxt=inputs[idx+1];if(nxt){nxt.focus();nxt.select();}}}} className={"price-input w-24 rounded-xl border-2 px-2 py-2 text-center text-sm font-bold outline-none transition-all font-latin "+(item.isDirty?"border-amber-300 bg-amber-50 text-amber-800 focus:border-[#2E8B57] focus:bg-white focus:ring-2 focus:ring-[#2E8B57]/20":"border-gray-200 bg-white text-gray-800 focus:border-[#2E8B57] focus:ring-2 focus:ring-[#2E8B57]/20")}/><span className="text-xs text-gray-400">MAD</span>{item.isDirty&&item.price_mad>0&&item.edited_price!==item.price_mad&&(<span className={"text-[10px] font-bold rounded-full px-1.5 py-0.5 "+(pct>0?"bg-red-100 text-red-600":"bg-emerald-100 text-emerald-700")}>{pct>0?"\u2191":"\u2193"}{Math.abs(pct).toFixed(0)}%</span>)}</div></td>
       <td className="px-5 py-3.5"><span className="text-xs font-semibold text-gray-400 font-latin">{item.unit||"—"}</span></td>
@@ -315,15 +318,69 @@ function PriceRow({item,rowIndex,totalRows,lang,onChange,onToggle,onSave,inputRe
 }
 
 function PinGate({onUnlock,lang,setLang}:{onUnlock:()=>void;lang:Lang;setLang:(l:Lang)=>void}){
-  const [pin,setPin]=useState("");const [err,setErr]=useState(false);
+  const [password,setPassword]=useState("");
+  const [totp,setTotp]=useState("");
+  const [loading,setLoading]=useState(false);
+  const [err,setErr]=useState("");
   const L=I[lang];const font=lang==="ar"?"font-arabic":"font-latin";
-  function submit(){if(pin===ADMIN_PIN){onUnlock();}else{setErr(true);setPin("");setTimeout(()=>setErr(false),2000);}}
-  return(<div className="relative flex min-h-screen flex-col items-center justify-center" style={{background:"linear-gradient(160deg,#0d3b36 0%,#0a2318 50%,#1a3a0d 100%)"}}><div className="absolute inset-0 opacity-10 pointer-events-none zellige-bg-light"/><div className="absolute top-4 right-4"><LangToggle lang={lang} setLang={setLang}/></div><div className={"flex flex-col items-center gap-5 rounded-3xl bg-white/95 p-10 shadow-2xl w-full max-w-sm "+font}><div className="flex h-20 w-20 items-center justify-center rounded-2xl shadow-xl" style={{background:"linear-gradient(135deg,#2E8B57,#0d3b36)"}}><Lock size={32} className="text-white"/></div><div className="text-center"><h1 className="text-2xl font-extrabold text-gray-800">{L.pin_title}</h1><p className="mt-1 text-sm text-gray-500">{L.pin_sub}</p></div><div className="w-full space-y-3"><input type="password" value={pin} onChange={e=>setPin(e.target.value)} onKeyDown={e=>e.key==="Enter"&&submit()} placeholder={L.pin_ph} dir="ltr" className={"w-full rounded-2xl border-2 bg-gray-50 px-4 py-3.5 text-center text-2xl font-bold tracking-widest outline-none transition-all "+(err?"border-red-400 text-red-500":"border-gray-200 text-gray-800 focus:border-[#2E8B57] focus:bg-white focus:ring-4 focus:ring-[#2E8B57]/10")}/>{err&&<p className={"text-center text-sm font-semibold text-red-500 "+font}>{L.pin_err}</p>}<button onClick={submit} className={"w-full rounded-2xl py-3.5 text-sm font-bold text-white shadow-lg active:scale-95 "+font} style={{background:"linear-gradient(135deg,#2E8B57,#1a6b42)"}}>{L.pin_btn}</button></div></div></div>);
+
+  useEffect(()=>{
+    const meta=document.createElement("meta");
+    meta.name="robots";meta.content="noindex, nofollow";
+    document.head.appendChild(meta);
+    return()=>{document.head.removeChild(meta);};
+  },[]);
+
+  async function submit(){
+    if(!password.trim()||!totp.trim()){setErr(L.pin_err);return;}
+    setLoading(true);setErr("");
+    const result=await loginAdmin(password.trim(),totp.trim());
+    setLoading(false);
+    if(result.ok){onUnlock();}
+    else{setErr(result.error??L.pin_err);setPassword("");setTotp("");}
+  }
+
+  return(
+    <div className="relative flex min-h-screen flex-col items-center justify-center" style={{background:"linear-gradient(160deg,#0d3b36 0%,#0a2318 50%,#1a3a0d 100%)"}}>
+      <div className="absolute top-4 right-4"><LangToggle lang={lang} setLang={setLang}/></div>
+      <div className={"flex flex-col items-center gap-5 rounded-3xl bg-white/95 p-10 shadow-2xl w-full max-w-sm "+font}>
+        <div className="flex h-20 w-20 items-center justify-center rounded-2xl shadow-xl" style={{background:"linear-gradient(135deg,#2E8B57,#0d3b36)"}}><Lock size={32} className="text-white"/></div>
+        <div className="text-center">
+          <h1 className="text-2xl font-extrabold text-gray-800">{L.pin_title}</h1>
+          <p className="mt-1 text-sm text-gray-500">Connexion administrateur sécurisée</p>
+        </div>
+        <div className="w-full space-y-3">
+          <input
+            type="password" value={password} autoFocus
+            onChange={e=>setPassword(e.target.value)}
+            onKeyDown={e=>e.key==="Enter"&&document.getElementById("totp-input")?.focus()}
+            placeholder="Mot de passe" dir="ltr" autoComplete="current-password"
+            className={"w-full rounded-2xl border-2 bg-gray-50 px-4 py-3.5 text-sm outline-none transition-all "+(err?"border-red-400":"border-gray-200 focus:border-[#2E8B57] focus:bg-white focus:ring-4 focus:ring-[#2E8B57]/10")}
+          />
+          <input
+            id="totp-input" type="text" inputMode="numeric" maxLength={6}
+            value={totp} onChange={e=>setTotp(e.target.value.replace(/\D/g,""))}
+            onKeyDown={e=>e.key==="Enter"&&submit()}
+            placeholder="Code de vérification" dir="ltr" autoComplete="one-time-code"
+            className={"w-full rounded-2xl border-2 bg-gray-50 px-4 py-3.5 text-center text-xl font-mono tracking-[0.4em] outline-none transition-all "+(err?"border-red-400 text-red-500":"border-gray-200 text-gray-800 focus:border-[#2E8B57] focus:bg-white focus:ring-4 focus:ring-[#2E8B57]/10")}
+          />
+          {err&&<p className={"text-center text-sm font-semibold text-red-500 "+font}>{err}</p>}
+          <button onClick={submit} disabled={loading}
+            className={"w-full rounded-2xl py-3.5 text-sm font-bold text-white shadow-lg active:scale-95 disabled:opacity-60 "+font}
+            style={{background:"linear-gradient(135deg,#2E8B57,#1a6b42)"}}>
+            {loading?<Loader2 size={16} className="animate-spin mx-auto"/>:L.pin_btn}
+          </button>
+        </div>
+        <p className="text-xs text-gray-400 text-center">Session fermée à la fermeture de l'onglet</p>
+      </div>
+    </div>
+  );
 }
 
 export default function AdminPage() {
   const [lang,setLang]           = useState<Lang>("ar");
-  const [unlocked,setUnlocked]   = useState(false);
+  // Auto-unlock if a valid JWT is already in sessionStorage from this session
+  const [unlocked,setUnlocked]   = useState(isAdminLoggedIn);
   const [activeTab,setActiveTab] = useState<AdminTab>("orders");
   const [orders,setOrders]                   = useState<Order[]>([]);
   const [ordersLoading,setOrdersLoading]     = useState(false);
@@ -343,7 +400,10 @@ export default function AdminPage() {
   const fetchOrders = useCallback(async()=>{
     setOrdersLoading(true);setOrdersError("");
     try{const data=await getOrders(statusFilter==="all"?undefined:statusFilter,100);setOrders(data);setLastSync(new Date().toLocaleTimeString());}
-    catch{setOrdersError(L.error_orders);}finally{setOrdersLoading(false);}
+    catch(e:any){
+      if(e?.response?.status===401||e?.response?.status===403){clearJwt();setUnlocked(false);return;}
+      setOrdersError(L.error_orders);
+    }finally{setOrdersLoading(false);}
   },[statusFilter,L.error_orders]);
 
   const fetchProducts = useCallback(async()=>{
@@ -358,18 +418,19 @@ export default function AdminPage() {
   async function handleStatusChange(id:string,status:OrderStatus){await updateOrderStatus(id,status);setOrders(prev=>prev.map(o=>o.id===id?{...o,status}:o));}
   function handlePriceChange(id:string,val:number){setProducts(prev=>prev.map(p=>p.id===id?{...p,edited_price:val,isDirty:val!==p.price_mad||p.edited_in_stock!==p.in_stock||p.edited_on_sale!==((p as any).on_sale??false)||p.edited_discount!==((p as any).discount_pct??0),saveStatus:"idle"}:p));}
   function handleToggleOnSale(id:string){setProducts(prev=>prev.map(p=>p.id===id?{...p,edited_on_sale:!p.edited_on_sale,isDirty:true,saveStatus:"idle"}:p));}
+  function handleDescriptionChange(id:string,val:string){setProducts(prev=>prev.map(p=>p.id===id?{...p,edited_description:val,isDirty:true,saveStatus:"idle"}:p));}
   function handleDiscountChange(id:string,val:number){setProducts(prev=>prev.map(p=>p.id===id?{...p,edited_discount:Math.max(0,Math.min(99,val)),isDirty:true,saveStatus:"idle"}:p));}
   function handleToggleStock(id:string){setProducts(prev=>prev.map(p=>p.id===id?{...p,edited_in_stock:!p.edited_in_stock,isDirty:true,saveStatus:"idle"}:p));}
   async function handleSave(id:string){
     const item=products.find(p=>p.id===id);if(!item||!item.isDirty)return;
     setProducts(prev=>prev.map(p=>p.id===id?{...p,isSaving:true}:p));
-    try{const r=await updateProductById(id,{price_mad:item.edited_price,in_stock:item.edited_in_stock,on_sale:item.edited_on_sale,discount_pct:item.edited_discount} as any);setProducts(prev=>prev.map(p=>p.id===id?{...p,...toEditable(r),isDirty:false,isSaving:false,saveStatus:"success"}:p));setTimeout(()=>setProducts(prev=>prev.map(p=>p.id===id?{...p,saveStatus:"idle"}:p)),3000);}
+    try{const r=await updateProductById(id,{price_mad:item.edited_price,in_stock:item.edited_in_stock,on_sale:item.edited_on_sale,discount_pct:item.edited_discount,description_fr:item.edited_description} as any);setProducts(prev=>prev.map(p=>p.id===id?{...p,...toEditable(r),isDirty:false,isSaving:false,saveStatus:"success"}:p));setTimeout(()=>setProducts(prev=>prev.map(p=>p.id===id?{...p,saveStatus:"idle"}:p)),3000);}
     catch{setProducts(prev=>prev.map(p=>p.id===id?{...p,isSaving:false,saveStatus:"error"}:p));}
   }
   async function handlePublishAll(){
     const dirty=products.filter(p=>p.isDirty);if(dirty.length===0){showToast(L.toast_no_dirty,"info");return;}
     setPublishing(true);let saved=0,failed=0;
-    for(const item of dirty){try{const r=await updateProductById(item.id,{price_mad:item.edited_price,in_stock:item.edited_in_stock,on_sale:item.edited_on_sale,discount_pct:item.edited_discount} as any);setProducts(prev=>prev.map(p=>p.id===item.id?{...p,...toEditable(r),isDirty:false,isSaving:false,saveStatus:"success"}:p));saved++;}catch{failed++;}}
+    for(const item of dirty){try{const r=await updateProductById(item.id,{price_mad:item.edited_price,in_stock:item.edited_in_stock,on_sale:item.edited_on_sale,discount_pct:item.edited_discount,description_fr:item.edited_description} as any);setProducts(prev=>prev.map(p=>p.id===item.id?{...p,...toEditable(r),isDirty:false,isSaving:false,saveStatus:"success"}:p));saved++;}catch{failed++;}}
     setPublishing(false);
     if(failed===0)showToast("\u2705 "+saved+L.toast_saved,"success");else showToast("\u26a0\ufe0f "+saved+L.toast_partial+" "+failed+L.toast_failed,"error");
     setTimeout(()=>setProducts(prev=>prev.map(p=>({...p,saveStatus:"idle"}))),3500);

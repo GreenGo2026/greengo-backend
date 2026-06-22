@@ -3,15 +3,12 @@ from __future__ import annotations
 
 import os
 from datetime import datetime, timedelta, timezone
-from typing import Any
 
 import jwt as pyjwt
 import pyotp
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, HTTPException, status
 from passlib.context import CryptContext
 from pydantic import BaseModel
-
-from app.auth import require_admin
 
 router = APIRouter(prefix="/api/v1/admin/auth", tags=["Admin Auth"])
 
@@ -95,29 +92,3 @@ async def admin_login(body: LoginRequest) -> TokenResponse:
         )
 
     return TokenResponse(access_token=issue_admin_jwt())
-
-
-@router.get(
-    "/setup",
-    summary="Generate a fresh TOTP secret for enrollment (protected, one-time use)",
-)
-async def admin_setup(_: None = Depends(require_admin)) -> dict[str, Any]:
-    """
-    Call this endpoint once (with X-Admin-Key) to get a TOTP secret.
-    Store ADMIN_TOTP_SECRET in Railway env vars, then scan the QR with
-    Google Authenticator. Delete or disable this endpoint afterwards.
-    """
-    secret = pyotp.random_base32()
-    totp   = pyotp.TOTP(secret)
-    uri    = totp.provisioning_uri(name="GreenGo Admin", issuer_name="GreenGo Market")
-    return {
-        "totp_secret":        secret,
-        "provisioning_uri":   uri,
-        "qr_image_url":       f"https://api.qrserver.com/v1/create-qr-code/?size=250x250&data={uri}",
-        "next_steps": [
-            "1. Copy ADMIN_TOTP_SECRET value to Railway environment variables.",
-            "2. Open Google Authenticator → '+' → Scan QR code (use qr_image_url).",
-            "3. Set ADMIN_PASSWORD_HASH in Railway (run setup_admin_credentials.py locally).",
-            "4. Redeploy Railway. The /setup endpoint is now useless — leave it or remove it.",
-        ],
-    }

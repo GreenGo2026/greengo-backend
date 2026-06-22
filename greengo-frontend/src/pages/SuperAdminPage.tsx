@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { getAnalytics } from "../services/api";
 import type { AnalyticsData, TopItem, AnalyticsPeriod } from "../services/api";
+import { isAdminLoggedIn, loginAdmin, clearJwt } from "../services/adminJwt";
 
 // ── Brand tokens extracted from background image ──────────────────────────────
 // Deep emerald left: #0d4a2a  Midnight navy right: #0a1628
@@ -26,7 +27,6 @@ const BRAND = {
   activeNavBorder: "rgba(52,211,153,0.3)",
 };
 
-const SUPER_PIN = "9999";
 type Lang = "ar" | "en";
 
 // ── i18n ──────────────────────────────────────────────────────────────────────
@@ -152,23 +152,33 @@ function LangToggle({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => void;
   );
 }
 
-// ── PIN gate ──────────────────────────────────────────────────────────────────
+// ── Login gate ────────────────────────────────────────────────────────────────
 function PinGate({ onUnlock }: { onUnlock: () => void; }) {
-  const navigate        = useNavigate();
-  const [lang, setLang] = useState<Lang>("ar");
-  const [pin,  setPin]  = useState("");
-  const [err,  setErr]  = useState(false);
-  const [shk,  setShk]  = useState(false);
+  const navigate           = useNavigate();
+  const [lang,  setLang]   = useState<Lang>("ar");
+  const [password, setPwd] = useState("");
+  const [totp, setTotp]    = useState("");
+  const [err,  setErr]     = useState(false);
+  const [shk,  setShk]     = useState(false);
+  const [loading, setLoad] = useState(false);
   const t    = T[lang];
   const dir  = lang === "ar" ? "rtl" : "ltr";
   const font = lang === "ar" ? "font-arabic" : "font-latin";
 
-  function submit() {
-    if (pin === SUPER_PIN) { onUnlock(); }
-    else {
-      setErr(true); setShk(true); setPin("");
-      setTimeout(() => { setErr(false); setShk(false); }, 600);
-    }
+  useEffect(() => {
+    const meta = document.createElement("meta");
+    meta.name = "robots"; meta.content = "noindex, nofollow";
+    document.head.appendChild(meta);
+    return () => { document.head.removeChild(meta); };
+  }, []);
+
+  async function submit() {
+    if (!password.trim() || !totp.trim()) { setErr(true); setShk(true); setTimeout(() => { setErr(false); setShk(false); }, 600); return; }
+    setLoad(true);
+    const result = await loginAdmin(password.trim(), totp.trim());
+    setLoad(false);
+    if (result.ok) { onUnlock(); }
+    else { setErr(true); setShk(true); setPwd(""); setTotp(""); setTimeout(() => { setErr(false); setShk(false); }, 600); }
   }
 
   return (
@@ -199,19 +209,27 @@ function PinGate({ onUnlock }: { onUnlock: () => void; }) {
             </div>
           </div>
           <div className="space-y-3">
-            <input type="password" inputMode="numeric" maxLength={6} value={pin} autoFocus
-              onChange={(e) => setPin(e.target.value)}
+            <input type="password" value={password} autoFocus
+              onChange={(e) => setPwd(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && document.getElementById("sa-totp")?.focus()}
+              placeholder="Mot de passe" dir="ltr" autoComplete="current-password"
+              className={"w-full rounded-2xl border px-4 py-3.5 text-sm font-semibold text-white outline-none transition-all placeholder:text-white/25 " +
+                (err ? "bg-red-500/10 border-red-500/50" : "border-white/10 focus:border-emerald-500/50 focus:bg-white/5")}
+              style={{ background: err ? undefined : "rgba(255,255,255,0.04)" }}
+            />
+            <input id="sa-totp" type="text" inputMode="numeric" maxLength={6}
+              value={totp} onChange={(e) => setTotp(e.target.value.replace(/\D/g, ""))}
               onKeyDown={(e) => e.key === "Enter" && submit()}
-              placeholder={t.pin_placeholder} dir="ltr"
+              placeholder={t.pin_placeholder} dir="ltr" autoComplete="one-time-code"
               className={"w-full rounded-2xl border px-4 py-4 text-center text-2xl font-black tracking-[0.5em] text-white outline-none transition-all placeholder:text-white/15 placeholder:tracking-widest " +
                 (err ? "bg-red-500/10 border-red-500/50" : "border-white/10 focus:border-emerald-500/50 focus:bg-white/5")}
               style={{ background: err ? undefined : "rgba(255,255,255,0.04)" }}
             />
             {err && <p className={"text-center text-xs font-semibold text-red-400 tracking-wide " + font} dir={dir}>{t.pin_error}</p>}
-            <button onClick={submit}
-              className={"w-full rounded-2xl py-3.5 text-sm font-black text-white shadow-2xl transition-all active:scale-[0.98] hover:brightness-110 " + font}
+            <button onClick={submit} disabled={loading}
+              className={"w-full rounded-2xl py-3.5 text-sm font-black text-white shadow-2xl transition-all active:scale-[0.98] hover:brightness-110 disabled:opacity-60 " + font}
               style={{ background: "linear-gradient(135deg," + BRAND.emerald + " 0%,#065f46 100%)", letterSpacing: lang === "en" ? "0.1em" : "normal", boxShadow: "0 4px 24px " + BRAND.emerald + "50" }}>
-              {t.pin_btn}
+              {loading ? <Loader2 size={16} className="animate-spin mx-auto" /> : t.pin_btn}
             </button>
           </div>
         </div>
@@ -462,7 +480,7 @@ function Sidebar({ onLogout, lang }: { onLogout: () => void; lang: Lang; }) {
 
           {/* Operations → /admin */}
           <button
-            onClick={() => navigate("/admin")}
+            onClick={() => navigate("/gestion")}
             className={"flex w-full items-center gap-3 rounded-xl border border-transparent px-3 py-2.5 text-xs font-bold text-white/40 transition-all hover:bg-white/8 hover:text-white/80 hover:border-white/10 active:scale-95 " + font}>
             <ShoppingBag size={15} className="shrink-0" strokeWidth={1.8}/>
             <span className="hidden md:block">{t.nav_operations}</span>
@@ -626,12 +644,13 @@ function Dashboard({ onLock }: { onLock: () => void; }) {
 
 // ── Entry point — hooks BEFORE early return ───────────────────────────────────
 export default function SuperAdminPage() {
-  const [unlocked, setUnlocked] = useState(false);
-  const navigate = useNavigate();   // ← declared before any conditional return
+  const [unlocked, setUnlocked] = useState(isAdminLoggedIn);
+  const navigate = useNavigate();
 
   function handleLock() {
+    clearJwt();
     setUnlocked(false);
-    navigate("/");                  // ← logout redirects to homepage
+    navigate("/");
   }
 
   if (!unlocked) return <PinGate onUnlock={() => setUnlocked(true)}/>;
