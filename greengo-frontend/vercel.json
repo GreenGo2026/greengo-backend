@@ -1,4 +1,9 @@
 {
+  "redirects": [
+    { "source": "/admin",       "destination": "/", "permanent": false },
+    { "source": "/admin/:path*","destination": "/", "permanent": false },
+    { "source": "/super-admin", "destination": "/", "permanent": false }
+  ],
   "rewrites": [
     {
       "source": "/sitemap.xml",
