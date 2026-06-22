@@ -112,7 +112,8 @@ function DealCard({ product, lang, expiresAt }: {
         {img
           ? <img src={img} alt={name || ""} width={120} height={120}
               className={`object-${product.image_url?.endsWith('.jpg') ? 'cover' : 'contain'} drop-shadow-xl`}
-              style={{ width: 100, height: 100 }} />
+              style={{ width: 100, height: 100 }}
+              loading="lazy" />
           : <span className="text-6xl">🛒</span>
         }
       </div>

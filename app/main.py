@@ -577,6 +577,8 @@ class MaxBodySizeMiddleware(_BaseMiddleware):
                 )
         return await call_next(request)
 
+from fastapi.middleware.gzip import GZipMiddleware
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(RateLimitMiddleware)
 app.add_middleware(MaxBodySizeMiddleware)
@@ -941,26 +943,3 @@ async def whatsapp_webhook(
     twiml = MessagingResponse()
     twiml.message(reply)
     return Response(content=str(twiml), media_type="application/xml")
-    total   = await col.count_documents({})
-    visible = await col.count_documents({"visible": True})
-    with_img = await col.count_documents({"image_url": {"$nin": ["", None]}})
-    return {
-        "updated": result.modified_count,
-        "total": total,
-        "visible": visible,
-        "with_image": with_img,
-    }
-
-    total   = await col.count_documents({})
-    visible = await col.count_documents({"visible": True})
-    with_img = await col.count_documents({"image_url": {"$nin": ["", None]}})
-    return {
-        "updated": result.modified_count,
-        "total": total,
-        "visible": visible,
-        "with_image": with_img,
-    }
-
-# redeploy-trigger-v2
-
-# feed-route-active

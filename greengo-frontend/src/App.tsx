@@ -22,11 +22,11 @@ const AboutPage        = lazy(() => import("./pages/AboutPage"));
 const ContactPage      = lazy(() => import("./pages/ContactPage"));
 const PaymentGateway   = lazy(() => import("./pages/Payment/PaymentGateway"));
 const UserDashboard    = lazy(() => import("./pages/Profile/UserDashboard"));
-const PrivacyPage      = lazy(() => import("./pages/legal/PrivacyPage"));
-const CGUPage          = lazy(() => import("./pages/legal/CGUPage"));
+const PrivacyPage      = lazy(() => import("./pages/Legal/PrivacyPage"));
+const CGUPage          = lazy(() => import("./pages/Legal/CGUPage"));
 const RecrutementPage  = lazy(() => import("./pages/RecrutementPage"));
-const TermsPage        = lazy(() => import("./pages/legal/TermsPage"));
-const InfoPage         = lazy(() => import("./pages/legal/InfoPage"));
+const TermsPage        = lazy(() => import("./pages/Legal/TermsPage"));
+const InfoPage         = lazy(() => import("./pages/Legal/InfoPage"));
 const ProductPage     = lazy(() => import("./pages/ProductPage"));
 const MenuPage        = lazy(() => import("./pages/MenuPage"));
 const PanierTypePage  = lazy(() => import("./pages/PanierTypePage"));
@@ -34,6 +34,8 @@ const OffresPage      = lazy(() => import("./pages/OffresPage"));
 const TrackOrderPage  = lazy(() => import("./pages/TrackOrderPage"));
 const FidelitePage     = lazy(() => import("./pages/FidelitePage"));
 import LegalTemplate, { LEGAL_PAGES } from "./pages/Legal/LegalTemplate";
+const LivraisonPage  = lazy(() => import("./pages/Legal/LivraisonPage"));
+const FAQPage        = lazy(() => import("./pages/Legal/FAQPage"));
 
 // ── Anti-scraping / anti-inspect protection ──────────────────────────────────
 function useAntiScraping() {
@@ -119,10 +121,10 @@ function PublicShell() {
 
   return (
     <div
-      className="flex min-h-screen flex-col pb-16 md:pb-0" style={{ overflowX: "hidden", background: "inherit" }}
+      className="flex min-h-screen flex-col pb-16 md:pb-0"
       style={{
+        overflowX: "hidden",
         background: "#FAF7F2",
-        // Disable text selection on content container
         userSelect: "none",
         WebkitUserSelect: "none",
       }}
@@ -137,10 +139,7 @@ function PublicShell() {
           <Route path="/about"        element={<AboutPage />}       />
           <Route path="/contact"      element={<ContactPage />}     />
 
-          {/* ── Admin ── */}
-          <Route path="/admin"        element={<AdminPage />}       />
-          <Route path="/admin/orders" element={<AdminOrders />}     />
-          <Route path="/admin/pos"    element={<POSPage />}         />
+          {/* Admin routes are handled at the root level (outside this shell) */}
 
           {/* ── Checkout / Payment ── */}
           <Route path="/payment"      element={<PaymentGateway />}  />
@@ -165,25 +164,8 @@ function PublicShell() {
           <Route path="/offres"         element={<OffresPage />} />
           <Route path="/track/:orderId?" element={<TrackOrderPage />} />
           <Route path="/fidelite"   element={<FidelitePage />} />
-          <Route path="/faq" element={<LegalTemplate
-            title="Questions Fréquentes"
-            subtitle="FAQ - GreenGo Market"
-            sections={[
-              { heading: "Comment passer une commande ?",       body: "Ajoutez vos produits au panier, remplissez le formulaire de livraison et confirmez. Vous recevrez une confirmation WhatsApp dans les 30 minutes." },
-              { heading: "Quels sont les délais de livraison ?", body: "La livraison est assurée en 2 à 4 heures dans Salé et les villes environnantes, entre 8h et 20h du lundi au samedi." },
-              { heading: "Comment annuler une commande ?",       body: "Contactez-nous sur WhatsApp au +212 664 397 031 dans les 30 minutes suivant votre commande." },
-              { heading: "Les produits sont-ils garantis frais ?", body: "Tous nos produits sont sélectionnés chaque matin. En cas de produit non conforme, nous procédons au remplacement ou au remboursement sous 24h." },
-            ]} />}
-          />
-          <Route path="/livraison" element={<LegalTemplate
-            title="Livraison & Retours"
-            subtitle="Politique de livraison - GreenGo Market"
-            sections={[
-              { heading: "Zones de livraison", body: "Salé, Rabat, Témara. Extension prévue à Mohammedia et Settat en 2025." },
-              { heading: "Tarifs de livraison", body: "Livraison offerte pendant tout le premier mois. Ensuite : gratuite pour toute commande supérieure à 200 MAD, sinon 15 MAD." },
-              { heading: "Politique de retour", body: "Signalez tout problème dans les 24h via WhatsApp avec une photo du produit. Nous remplaçons ou remboursons sans condition." },
-            ]} />}
-          />
+          <Route path="/faq" element={<FAQPage />} />
+          <Route path="/livraison" element={<LivraisonPage />} />
         </Routes>
       </main>
       <Footer />
@@ -203,9 +185,12 @@ export default function App() {
       <LanguageProvider>
         <Suspense fallback={<PageLoader />}>
           <Routes>
-            {/* Super-admin is fully standalone — no Header/Footer */}
-            <Route path="/super-admin" element={<SuperAdminPage />} />
-            {/* All other routes get the public shell */}
+            {/* Admin routes — fully standalone, no Header/Footer, no public shell */}
+            <Route path="/super-admin"  element={<SuperAdminPage />} />
+            <Route path="/admin"        element={<AdminPage />}      />
+            <Route path="/admin/orders" element={<AdminOrders />}    />
+            <Route path="/admin/pos"    element={<POSPage />}        />
+            {/* All public-facing routes get the shell (Header + Footer) */}
             <Route path="/*" element={<PublicShell />} />
           </Routes>
         </Suspense>
