@@ -40,7 +40,7 @@ from twilio.twiml.messaging_response import MessagingResponse
 # ---------------------------------------------------------------------------
 from app.auth import require_admin
 from app.config import get_settings
-from app.database import close_db, connect_db, orders_col, products_col, whatsapp_orders_col
+from app.database import close_db, connect_db, get_db_client, orders_col, products_col, whatsapp_orders_col
 from app.routes.products import router as products_router
 from app.routes.orders   import router as orders_router
 from app.routes.webhook  import router as webhook_router
@@ -478,7 +478,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         print("WARNING: TWILIO_AUTH_TOKEN not set — webhook will reject all requests.")
     print(f"STARTUP: Catalog items loaded -> {len(_CATALOG)}")
     await connect_db()
+
+    async def _mongo_keepalive() -> None:
+        while True:
+            await asyncio.sleep(8 * 60 * 60)
+            try:
+                await get_db_client().admin.command("ping")
+            except Exception:
+                pass
+
+    _keepalive = asyncio.create_task(_mongo_keepalive())
     yield
+    _keepalive.cancel()
     close_db()
 
 

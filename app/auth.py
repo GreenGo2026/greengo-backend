@@ -40,15 +40,18 @@ def _admin_key() -> str:
 
 
 def _jwt_secret() -> str:
-    return os.getenv("JWT_SECRET", "")
+    s = os.getenv("JWT_SECRET", "")
+    if not s:
+        raise RuntimeError("JWT_SECRET is not set — check your environment variables.")
+    return s
 
 
 # ── JWT verification ──────────────────────────────────────────────────────────
 
 def _verify_jwt(token: str) -> bool:
-    secret = _jwt_secret()
-    if not secret or not token:
+    if not token:
         return False
+    secret = _jwt_secret()
     try:
         payload = pyjwt.decode(token, secret, algorithms=["HS256"])
         return payload.get("sub") == "admin"
