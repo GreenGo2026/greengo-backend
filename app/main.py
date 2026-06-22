@@ -489,8 +489,9 @@ app = FastAPI(
     title="GreenGo Market API",
     version="2.0.0",
     lifespan=lifespan,
-    docs_url  = None,   # disabled in all environments — schema still at /openapi.json
-    redoc_url = None,
+    docs_url    = None,
+    redoc_url   = None,
+    openapi_url = None,  # schema not publicly accessible in any environment
 )
 
 
@@ -533,9 +534,10 @@ class SecurityHeadersMiddleware(_BaseMiddleware):
 
 # ── Rate limiting middleware ──────────────────────────────────────────────────
 _RATE_LIMITS: dict[str, list[float]] = _defaultdict(list)
-_RATE_WINDOW  = 60      # seconds
-_RATE_MAX_REQ = 60      # requests per window per IP (general)
-_RATE_MAX_ORD = 10      # stricter limit for POST /orders
+_RATE_WINDOW       = 60      # seconds
+_RATE_MAX_REQ      = 60      # requests per window per IP (general)
+_RATE_MAX_ORD      = 10      # stricter limit for POST /orders
+_RATE_MAX_ADMIN_LOGIN = 5    # very strict for admin login — brute-force target
 
 class RateLimitMiddleware(_BaseMiddleware):
     async def dispatch(self, request, call_next):
@@ -543,10 +545,13 @@ class RateLimitMiddleware(_BaseMiddleware):
         now = _time.time()
         path = request.url.path
 
-        # Choose limit
-        limit = _RATE_MAX_ORD if (
-            path.startswith("/api/v1/orders") and request.method == "POST"
-        ) else _RATE_MAX_REQ
+        # Choose limit — most restrictive paths first
+        if path == "/api/v1/admin/auth/login" and request.method == "POST":
+            limit = _RATE_MAX_ADMIN_LOGIN
+        elif path.startswith("/api/v1/orders") and request.method == "POST":
+            limit = _RATE_MAX_ORD
+        else:
+            limit = _RATE_MAX_REQ
 
         key = f"{ip}:{path if limit == _RATE_MAX_ORD else 'global'}"
         _RATE_LIMITS[key] = [t for t in _RATE_LIMITS[key] if now - t < _RATE_WINDOW]
@@ -582,6 +587,12 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(RateLimitMiddleware)
 app.add_middleware(MaxBodySizeMiddleware)
+
+from slowapi.errors import RateLimitExceeded as _RateLimitExceeded
+from slowapi import _rate_limit_exceeded_handler as _slowapi_handler
+from app.routes.customers import limiter as _customers_limiter
+app.state.limiter = _customers_limiter
+app.add_exception_handler(_RateLimitExceeded, _slowapi_handler)
 
 app.include_router(admin_auth_router)
 app.include_router(products_router)

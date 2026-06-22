@@ -4,13 +4,14 @@ from datetime import datetime, timezone
 from typing import Any
 
 from bson import ObjectId
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, AliasChoices
 
 import io
 from fastapi.responses import StreamingResponse
+from app.auth import require_admin
 from app.services.pdf_generator import generate_invoice_pdf
-from app.database import orders_col, customers_col
+from app.database import orders_col, customers_col, products_col
 from app.services.whatsapp import send_whatsapp_message
 
 router = APIRouter(prefix="/api/v1/orders", tags=["Orders"])
@@ -54,6 +55,18 @@ def _calculate_points(total_price: float) -> int:
     """10 MAD = 1 Point. Truncated (no rounding up)."""
     return int(total_price // 10)
 
+async def _server_price(name: str, client_fallback: float) -> float:
+    """Look up the authoritative price from MongoDB; fall back to client value if not found.
+    This prevents price manipulation: the client cannot lower prices by sending a fake price_per_unit."""
+    col = products_col()
+    doc = await col.find_one(
+        {"$or": [{"name_fr": name}, {"name_ar": name}]},
+        {"price_mad": 1},
+    )
+    if doc and doc.get("price_mad"):
+        return float(doc["price_mad"])
+    return client_fallback
+
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @router.post("", response_model=OrderResponse, status_code=201, summary="Place a new order")
@@ -63,7 +76,20 @@ async def create_order(payload: CreateOrderPayload) -> OrderResponse:
     cust_col = customers_col()
     now      = datetime.now(tz=timezone.utc)
 
-    # ── 1. Build order document ───────────────────────────────────────────────
+    # ── 1. Resolve authoritative prices from DB (prevents price manipulation) ──
+    validated_items: list[dict[str, Any]] = []
+    for item in payload.items:
+        real_price = await _server_price(item.name, item.price_per_unit)
+        validated_items.append({
+            "name":           item.name,
+            "quantity":       item.quantity,
+            "unit":           item.unit,
+            "price_per_unit": real_price,
+            "line_total":     round(item.quantity * real_price, 2),
+        })
+    server_total = round(sum(i["line_total"] for i in validated_items), 2)
+
+    # ── 2. Build order document ───────────────────────────────────────────────
     doc: dict[str, Any] = {
         "customer_name": payload.customer_name.strip(),
         "phone":         payload.phone.strip(),
@@ -72,17 +98,8 @@ async def create_order(payload: CreateOrderPayload) -> OrderResponse:
             {"lat": payload.gps_coordinates.lat, "lng": payload.gps_coordinates.lng}
             if payload.gps_coordinates else None
         ),
-        "items": [
-            {
-                "name":           item.name,
-                "quantity":       item.quantity,
-                "unit":           item.unit,
-                "price_per_unit": item.price_per_unit,
-                "line_total":     round(item.quantity * item.price_per_unit, 2),
-            }
-            for item in payload.items
-        ],
-        "total_price": round(payload.total_price, 2),
+        "items": validated_items,
+        "total_price": server_total,
         "status":      "Pending",
         "created_at":  now,
         "updated_at":  now,
@@ -91,11 +108,11 @@ async def create_order(payload: CreateOrderPayload) -> OrderResponse:
     try:
         result   = await col.insert_one(doc)
         order_id = str(result.inserted_id)
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"DB insert failed: {exc}")
+    except Exception:
+        raise HTTPException(status_code=500, detail="Failed to create order. Please try again.")
 
-    # ── 2. Loyalty — upsert customer & accumulate points ──────────────────────
-    earned_points = _calculate_points(payload.total_price)
+    # ── 3. Loyalty — upsert customer & accumulate points ──────────────────────
+    earned_points = _calculate_points(server_total)
     points_to_deduct = payload.points_used if payload.use_points and payload.points_used > 0 else 0
     net_points_delta  = earned_points - points_to_deduct
     phone_key     = payload.phone.strip()
@@ -117,7 +134,7 @@ async def create_order(payload: CreateOrderPayload) -> OrderResponse:
                 "$push": {
                     "orders": {
                         "order_id":      order_id,
-                        "total_price":   round(payload.total_price, 2),
+                        "total_price":   server_total,
                         "points_earned": earned_points,
                         "points_used":   points_to_deduct,
                         "date":          now,
@@ -132,12 +149,12 @@ async def create_order(payload: CreateOrderPayload) -> OrderResponse:
         # Loyalty failure must NOT block the order confirmation
         total_points = earned_points
 
-    # ── 3. WhatsApp notification (with loyalty info) ──────────────────────────
+    # ── 4. WhatsApp notification (with loyalty info) ──────────────────────────
     msg = (
         f"🟢 مرحباً {payload.customer_name}!\n\n"
         f"شكراً لاختيارك GreenGo Market 🛒\n"
         f"لقد توصلنا بطلبك (رقم: {order_id[-6:]}) بنجاح.\n\n"
-        f"إجمالي الطلب: {payload.total_price:.2f} درهم\n"
+        f"إجمالي الطلب: {server_total:.2f} درهم\n"
         f"الحالة: قيد الانتظار (Pending) ⏳\n\n"
         f"⭐ نقاط الولاء المكتسبة: +{earned_points} نقطة\n"
         f"💰 رصيد نقاطك الإجمالي: {total_points} نقطة\n"
@@ -156,7 +173,7 @@ async def create_order(payload: CreateOrderPayload) -> OrderResponse:
 
 
 @router.get("", summary="List all orders (admin)")
-async def list_orders(limit: int = 50, phone: str | None = None) -> list[dict[str, Any]]:
+async def list_orders(limit: int = 50, phone: str | None = None, _: None = Depends(require_admin)) -> list[dict[str, Any]]:
     col  = orders_col()
     query: dict = {}
     if phone:
@@ -178,6 +195,7 @@ async def list_orders(limit: int = 50, phone: str | None = None) -> list[dict[st
 async def update_order_status(
     order_id: str,
     status:   str,
+    _: None = Depends(require_admin),
 ) -> dict[str, Any]:
     # Normalize: accept both "out_for_delivery" and "Out for Delivery"
     status_map = {
@@ -223,7 +241,7 @@ async def update_order_status(
 
 
 @router.get("/{order_id}", summary="Get single order by ID")
-async def get_order(order_id: str) -> dict[str, Any]:
+async def get_order(order_id: str, _: None = Depends(require_admin)) -> dict[str, Any]:
     col = orders_col()
     doc = None
     # Try ObjectId first
@@ -244,7 +262,7 @@ async def get_order(order_id: str) -> dict[str, Any]:
     return doc
 
 @router.get("/{order_id}/invoice", summary="Download PDF invoice for an order")
-async def download_invoice(order_id: str):
+async def download_invoice(order_id: str, _: None = Depends(require_admin)):
     from app.database import whatsapp_orders_col
 
     doc = None

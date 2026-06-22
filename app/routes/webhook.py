@@ -6,7 +6,10 @@ Responds in < 2s to avoid Green-API timeout.
 """
 from __future__ import annotations
 
+import ipaddress
 import logging
+import os
+import secrets
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Request
@@ -16,6 +19,21 @@ from app.services.whatsapp import send_whatsapp_message
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/webhook", tags=["Webhook"])
+
+# ── Allowlisted IP networks (Green-API server ranges) ─────────────────────────
+_ALLOWED_NETWORKS: list[ipaddress.IPv4Network] = [
+    ipaddress.IPv4Network("116.203.0.0/16"),
+]
+
+def _is_allowed_ip(ip_str: str) -> bool:
+    try:
+        addr = ipaddress.IPv4Address(ip_str)
+        return any(addr in net for net in _ALLOWED_NETWORKS)
+    except ValueError:
+        return False
+
+def _webhook_token() -> str:
+    return os.getenv("GREENAPI_WEBHOOK_TOKEN", "")
 
 # ── Auto-reply message ────────────────────────────────────────────────────────
 SUPPORT_PHONE = "212664397031"   # Update to your real support number
@@ -58,6 +76,30 @@ async def whatsapp_webhook(
     Receives webhook events from Green-API.
     Returns 200 immediately, sends auto-reply in background.
     """
+    # ── 1. IP allowlist — reject anything not from Green-API servers ──────────
+    # Use X-Forwarded-For first: Railway terminates TLS at a proxy, so
+    # request.client.host is always the internal proxy IP (10.x.x.x), not the
+    # real caller. X-Forwarded-For contains the original public IP.
+    forwarded_for = request.headers.get("X-Forwarded-For", "")
+    client_ip = (
+        forwarded_for.split(",")[0].strip()
+        if forwarded_for
+        else (request.client.host if request.client else "")
+    )
+    if not _is_allowed_ip(client_ip):
+        logger.warning("[Webhook] Rejected request from unlisted IP: %s", client_ip)
+        return JSONResponse(status_code=403, content={"detail": "Forbidden"})
+
+    # ── 2. Token check — constant-time comparison to prevent timing attacks ───
+    expected_token = _webhook_token()
+    if expected_token:
+        received_token = request.headers.get("X-Webhook-Token", "")
+        if not received_token or not secrets.compare_digest(
+            received_token.encode(), expected_token.encode()
+        ):
+            logger.warning("[Webhook] Rejected request with invalid token from IP: %s", client_ip)
+            return JSONResponse(status_code=403, content={"detail": "Forbidden"})
+
     try:
         body: dict[str, Any] = await request.json()
     except Exception:

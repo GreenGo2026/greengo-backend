@@ -1,6 +1,7 @@
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+from app.auth import require_admin
 from app.database import customers_col
 
 router  = APIRouter(prefix="/api/v1/customers", tags=["Customers"])
@@ -17,7 +18,7 @@ def _normalize_phone(phone: str) -> str:
 
 @router.get("/{phone}", summary="Returning customer lookup by phone")
 @limiter.limit("20/minute")
-async def get_customer(phone: str, request: Request) -> dict:
+async def get_customer(phone: str, request: Request, _: None = Depends(require_admin)) -> dict:
     """
     Returns minimum checkout autofill data for a returning customer.
     Phone is the lookup key. Returns 404 if not found.

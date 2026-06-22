@@ -1,4 +1,4 @@
-# app/routes/products.py
+﻿# app/routes/products.py
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -6,8 +6,9 @@ from typing import Any, Optional
 
 from bson import ObjectId
 from bson.errors import InvalidId
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
+from app.auth import require_admin
 from app.database import products_col
 from app.models.product import ProductResponse, UpdateProductRequest
 
@@ -33,6 +34,7 @@ def _serialize(doc: dict[str, Any]) -> ProductResponse:
 
     # display name: canonical is name_ar; fall back to arabic_name / name
     name_ar = doc.get("name_ar") or doc.get("arabic_name") or doc.get("name", "")
+    step_val = doc.get("step")
 
     return ProductResponse(
         id           = str(doc["_id"]),
@@ -49,6 +51,7 @@ def _serialize(doc: dict[str, Any]) -> ProductResponse:
         on_sale      = bool(doc.get("on_sale", False)),
         discount_pct = int(doc.get("discount_pct", 0)),
         description_fr = str(doc.get("description_fr", "")),
+        step           = float(step_val) if step_val is not None else None,
     )
 
 
@@ -59,8 +62,8 @@ async def list_products(
 ) -> list[ProductResponse]:
     """
     Returns all products sorted: in-stock first, then by arabic name.
-    ?available_only=true  — exclude out-of-stock items.
-    ?category=Vegetables  — filter by category.
+    ?available_only=true  â€” exclude out-of-stock items.
+    ?category=Vegetables  â€” filter by category.
     """
     query: dict[str, Any] = {}
 
@@ -79,8 +82,8 @@ async def list_products(
             ("in_stock",  -1),
             ("name_ar",    1),
         ]).to_list(length=500)
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"DB error: {exc}")
+    except Exception:
+        raise HTTPException(status_code=500, detail="Failed to fetch products.")
 
     return [_serialize(d) for d in docs]
 
@@ -102,6 +105,7 @@ async def get_product(product_id: str) -> ProductResponse:
 async def update_product(
     product_id: str,
     payload:    UpdateProductRequest,
+    _: None = Depends(require_admin),
 ) -> ProductResponse:
     """
     Update one or more fields.  Accepts both canonical and legacy field names.
@@ -138,6 +142,8 @@ async def update_product(
         updates["unit"] = payload.unit
     if payload.category is not None:
         updates["category"] = payload.category
+    if payload.step is not None:
+        updates["step"] = float(payload.step)
     if payload.description_fr is not None:
         updates["description_fr"] = payload.description_fr.strip()
     if payload.on_sale is not None:
@@ -145,7 +151,7 @@ async def update_product(
     if payload.discount_pct is not None:
         updates["discount_pct"] = payload.discount_pct
 
-    if len(updates) == 1:  # only updated_at — nothing useful provided
+    if len(updates) == 1:  # only updated_at â€” nothing useful provided
         raise HTTPException(status_code=400, detail="Provide at least one field to update.")
 
     try:
@@ -160,3 +166,4 @@ async def update_product(
     if doc is None:
         raise HTTPException(status_code=404, detail="Product disappeared after update.")
     return _serialize(doc)
+

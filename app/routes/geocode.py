@@ -26,8 +26,8 @@ async def reverse_geocode(lat: float, lng: float) -> dict:
             r = await client.get(url, params=params, headers=headers)
             r.raise_for_status()
             data = r.json()
-    except Exception as e:
-        raise HTTPException(status_code=503, detail=f"Geocoding unavailable: {e}")
+    except Exception:
+        raise HTTPException(status_code=503, detail="Geocoding service temporarily unavailable.")
 
     addr = data.get("address", {})
     # Build a clean Moroccan delivery address
