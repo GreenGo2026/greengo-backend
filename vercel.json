@@ -1,4 +1,6 @@
 {
+  "buildCommand": "cd greengo-frontend && npm install && npm run build",
+  "outputDirectory": "greengo-frontend/dist",
   "redirects": [
     { "source": "/admin",        "destination": "/", "permanent": false },
     { "source": "/admin/:path*", "destination": "/", "permanent": false },
@@ -27,13 +29,6 @@
         { "key": "Referrer-Policy",          "value": "strict-origin-when-cross-origin" },
         { "key": "Permissions-Policy",       "value": "camera=(), microphone=(), geolocation=(self)" },
         { "key": "Strict-Transport-Security","value": "max-age=63072000; includeSubDomains; preload" }
-      ]
-    },
-    {
-      "source": "/menu",
-      "headers": [
-        { "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate" },
-        { "key": "Vary",          "value": "Accept-Encoding" }
       ]
     },
     {
