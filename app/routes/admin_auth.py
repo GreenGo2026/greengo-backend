@@ -1,6 +1,7 @@
 # app/routes/admin_auth.py
 from __future__ import annotations
 
+import logging
 import os
 from datetime import datetime, timedelta, timezone
 
@@ -10,6 +11,8 @@ from fastapi import APIRouter, HTTPException, status
 from passlib.context import CryptContext
 from pydantic import BaseModel
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/api/v1/admin/auth", tags=["Admin Auth"])
 
 _pwd_ctx = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
@@ -18,14 +21,14 @@ _pwd_ctx = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 # ── Env-var helpers ───────────────────────────────────────────────────────────
 
 def _password_hash() -> str:
-    h = os.getenv("ADMIN_PASSWORD_HASH", "")
+    h = os.getenv("ADMIN_PASSWORD_HASH", "").strip().strip('"').strip("'").strip()
     if not h:
         raise RuntimeError("ADMIN_PASSWORD_HASH is not set in environment.")
     return h
 
 
 def _totp_secret() -> str:
-    s = os.getenv("ADMIN_TOTP_SECRET", "")
+    s = os.getenv("ADMIN_TOTP_SECRET", "").strip().strip('"').strip("'").strip()
     if not s:
         raise RuntimeError("ADMIN_TOTP_SECRET is not set in environment.")
     return s
@@ -79,10 +82,17 @@ async def admin_login(body: LoginRequest) -> TokenResponse:
 
     # Validate 6-digit TOTP (accept ±30 s window to tolerate clock skew)
     try:
-        totp   = pyotp.TOTP(_totp_secret())
+        totp    = pyotp.TOTP(_totp_secret())
         totp_ok = totp.verify(body.totp_code.strip(), valid_window=1)
     except Exception:
         totp_ok = False
+
+    if not totp_ok:
+        logger.warning(
+            "TOTP verification failed — server_time=%s window=1 input_length=%d",
+            datetime.now(tz=timezone.utc).isoformat(),
+            len(body.totp_code) if body.totp_code else 0,
+        )
 
     # Return the same error whether password or TOTP failed (no oracle)
     if not pw_ok or not totp_ok:
