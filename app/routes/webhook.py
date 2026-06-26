@@ -1,8 +1,9 @@
 # app/routes/webhook.py
 """
 Green-API incoming message webhook.
-Receives customer messages and replies with a support redirect message.
-Responds in < 2s to avoid Green-API timeout.
+Receives customer WhatsApp messages, saves them to MongoDB,
+and sends an auto-reply in the background.
+Returns HTTP 200 in < 2s to avoid Green-API timeout.
 """
 from __future__ import annotations
 
@@ -10,20 +11,25 @@ import ipaddress
 import logging
 import os
 import secrets
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Request
 from fastapi.responses import JSONResponse
 
+from app.database import whatsapp_orders_col
 from app.services.whatsapp import send_whatsapp_message
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/webhook", tags=["Webhook"])
 
-# ── Allowlisted IP networks (Green-API server ranges) ─────────────────────────
+# ── Known Green-API IP ranges (informational — token is the primary gate) ─────
 _ALLOWED_NETWORKS: list[ipaddress.IPv4Network] = [
-    ipaddress.IPv4Network("116.203.0.0/16"),
+    ipaddress.IPv4Network("54.37.0.0/16"),    # Green-API production
+    ipaddress.IPv4Network("51.75.0.0/16"),    # Green-API production
+    ipaddress.IPv4Network("116.203.0.0/16"),  # Hetzner (observed historically)
 ]
+
 
 def _is_allowed_ip(ip_str: str) -> bool:
     try:
@@ -32,11 +38,24 @@ def _is_allowed_ip(ip_str: str) -> bool:
     except ValueError:
         return False
 
+
 def _webhook_token() -> str:
     return os.getenv("GREENAPI_WEBHOOK_TOKEN", "")
 
+
+# ── Order keyword detection ───────────────────────────────────────────────────
+_ORDER_KEYWORDS = (
+    "commande", "je veux", "livraison", "commander", "prix",
+    "كيلو", "كمية", "عندك", "بغيت",
+)
+
+def _looks_like_order(text: str) -> bool:
+    t = text.lower()
+    return any(kw in t for kw in _ORDER_KEYWORDS)
+
+
 # ── Auto-reply message ────────────────────────────────────────────────────────
-SUPPORT_PHONE = "212664397031"   # Update to your real support number
+SUPPORT_PHONE = "212664397031"
 
 AUTO_REPLY = (
     "مرحباً بك في GreenGo Market 🥬\n\n"
@@ -47,17 +66,15 @@ AUTO_REPLY = (
     "فريق GreenGo Market يرحب بك دائماً! 💚"
 )
 
-# Track replied senders to avoid spam loops (in-memory, resets on restart)
 _replied_recently: set[str] = set()
 
 
 def _send_reply_task(sender_phone: str) -> None:
-    """Background task — runs after HTTP 200 is returned to Green-API."""
+    """Background task — fires after HTTP 200 is returned to Green-API."""
     if sender_phone in _replied_recently:
         logger.info("[Webhook] Skipping duplicate reply to %s", sender_phone)
         return
     _replied_recently.add(sender_phone)
-    # Limit set size to avoid unbounded growth
     if len(_replied_recently) > 500:
         _replied_recently.clear()
     success = send_whatsapp_message(sender_phone, AUTO_REPLY)
@@ -74,64 +91,102 @@ async def whatsapp_webhook(
 ) -> JSONResponse:
     """
     Receives webhook events from Green-API.
-    Returns 200 immediately, sends auto-reply in background.
+
+    Authentication priority:
+    1. If GREENAPI_WEBHOOK_TOKEN is set: validate token from
+       X-Webhook-Token header OR ?t= query param. Accept from any IP.
+    2. If no token configured: fall back to IP allowlist.
+
+    Set webhook URL in Green-API dashboard to:
+      https://<your-host>/api/v1/webhook/whatsapp?t=<GREENAPI_WEBHOOK_TOKEN>
     """
-    # ── 1. IP allowlist — reject anything not from Green-API servers ──────────
-    # Use X-Forwarded-For first: Railway terminates TLS at a proxy, so
-    # request.client.host is always the internal proxy IP (10.x.x.x), not the
-    # real caller. X-Forwarded-For contains the original public IP.
+    # ── Resolve real client IP (Railway proxy passes X-Forwarded-For) ─────────
     forwarded_for = request.headers.get("X-Forwarded-For", "")
     client_ip = (
         forwarded_for.split(",")[0].strip()
         if forwarded_for
-        else (request.client.host if request.client else "")
+        else (request.client.host if request.client else "unknown")
     )
-    if not _is_allowed_ip(client_ip):
-        logger.warning("[Webhook] Rejected request from unlisted IP: %s", client_ip)
-        return JSONResponse(status_code=403, content={"detail": "Forbidden"})
 
-    # ── 2. Token check — constant-time comparison to prevent timing attacks ───
+    known_ip = _is_allowed_ip(client_ip)
+    if not known_ip:
+        logger.info("[Webhook] Request from non-allowlisted IP: %s", client_ip)
+
+    # ── Authentication ────────────────────────────────────────────────────────
     expected_token = _webhook_token()
     if expected_token:
-        received_token = request.headers.get("X-Webhook-Token", "")
+        # Token configured: accept any IP that presents the correct token
+        # (from header OR from ?t= query param in webhook URL)
+        received_token = (
+            request.headers.get("X-Webhook-Token", "")
+            or request.query_params.get("t", "")
+        )
         if not received_token or not secrets.compare_digest(
             received_token.encode(), expected_token.encode()
         ):
-            logger.warning("[Webhook] Rejected request with invalid token from IP: %s", client_ip)
+            logger.warning("[Webhook] Token mismatch from IP: %s", client_ip)
             return JSONResponse(status_code=403, content={"detail": "Forbidden"})
+    elif not known_ip:
+        # No token configured AND unknown IP — block
+        logger.warning("[Webhook] Rejected: unknown IP %s, no token configured", client_ip)
+        return JSONResponse(status_code=403, content={"detail": "Forbidden"})
 
+    # ── Parse body ────────────────────────────────────────────────────────────
     try:
         body: dict[str, Any] = await request.json()
     except Exception:
-        # Malformed body — still return 200 so Green-API doesn't retry
         return JSONResponse(status_code=200, content={"ok": True})
 
     logger.debug("[Webhook] Received: %s", body)
 
-    # Green-API event types we care about: incomingMessageReceived
     event_type = body.get("typeWebhook", "")
     if event_type != "incomingMessageReceived":
         return JSONResponse(status_code=200, content={"ok": True, "ignored": event_type})
 
-    # Extract sender phone from chatId (format: "212XXXXXXXXX@c.us")
+    # ── Extract sender and message ────────────────────────────────────────────
     try:
         sender_data  = body.get("senderData", {})
-        chat_id      = sender_data.get("chatId", "")          # "212664XXXXXX@c.us"
+        chat_id      = sender_data.get("chatId", "")
         sender_phone = chat_id.replace("@c.us", "").replace("@g.us", "")
+        sender_name  = sender_data.get("senderName", "")
 
-        # Ignore group messages and empty senders
         if not sender_phone or "@g.us" in chat_id:
             return JSONResponse(status_code=200, content={"ok": True, "ignored": "group"})
 
-        # Ignore messages from our own support number (avoid loop)
         if sender_phone == SUPPORT_PHONE or sender_phone.endswith(SUPPORT_PHONE[-9:]):
             return JSONResponse(status_code=200, content={"ok": True, "ignored": "self"})
 
-        # Queue auto-reply in background — response returns immediately
+        message_data = body.get("messageData", {})
+        msg_type     = message_data.get("typeMessage", "")
+        message_text = ""
+        if msg_type == "textMessage":
+            message_text = message_data.get("textMessageData", {}).get("textMessage", "")
+        elif msg_type == "extendedTextMessage":
+            message_text = message_data.get("extendedTextMessageData", {}).get("text", "")
+
+        # ── Save to MongoDB ───────────────────────────────────────────────────
+        looks_like_order = _looks_like_order(message_text)
+        try:
+            await whatsapp_orders_col().insert_one({
+                "source":          "whatsapp",
+                "customer_phone":  sender_phone,
+                "customer_name":   sender_name,
+                "raw_message":     message_text,
+                "message_type":    msg_type,
+                "status":          "pending_review" if looks_like_order else "inquiry",
+                "created_at":      datetime.now(timezone.utc),
+            })
+            logger.info(
+                "[Webhook] Saved %s message from %s (order_like=%s)",
+                msg_type, sender_phone, looks_like_order,
+            )
+        except Exception as db_exc:
+            logger.warning("[Webhook] MongoDB save failed: %s", db_exc)
+
+        # ── Queue auto-reply (runs after 200 is returned) ─────────────────────
         background_tasks.add_task(_send_reply_task, sender_phone)
 
     except Exception as exc:
-        logger.warning("[Webhook] Error parsing webhook body: %s", exc)
+        logger.warning("[Webhook] Error processing webhook body: %s", exc)
 
-    # Always return 200 fast — Green-API expects response within 5s
     return JSONResponse(status_code=200, content={"ok": True})

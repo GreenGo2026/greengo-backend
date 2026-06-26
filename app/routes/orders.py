@@ -50,6 +50,9 @@ class AssignDriverPayload(BaseModel):
     driver_name: str
     driver_phone: str
 
+class UpdateStatusPayload(BaseModel):
+    status: str
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _fmt_items(items: list[OrderItem]) -> str:
@@ -198,10 +201,11 @@ async def list_orders(limit: int = 50, phone: str | None = None, _: None = Depen
 @router.patch("/{order_id}/status", summary="Update order status")
 async def update_order_status(
     order_id: str,
-    status:   str,
+    payload: UpdateStatusPayload,
     _: None = Depends(require_admin),
 ) -> dict[str, Any]:
-    # Normalize: accept both "out_for_delivery" and "Out for Delivery"
+    status = payload.status
+    # Normalize: accept "out_for_delivery", "Out for Delivery", etc.
     status_map = {
         "pending":          "Pending",
         "preparing":        "Preparing",
@@ -214,7 +218,10 @@ async def update_order_status(
     }
     final_status = status_map.get(status.lower().strip())
     if not final_status:
-        raise HTTPException(status_code=400, detail=f"Invalid status: {status}. Must be one of: {list(status_map.keys())}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid status: {status}. Must be one of: {list(status_map.keys())}",
+        )
 
     col   = orders_col()
     order = await col.find_one({"_id": ObjectId(order_id)})
@@ -227,18 +234,37 @@ async def update_order_status(
     )
 
     customer_phone = order.get("phone")
-    customer_name  = order.get("customer_name", "الزبون الكريم")
+    customer_name  = order.get("customer_name", "عزيزنا الزبون")
+    short_id       = order_id[-6:].upper()
 
     if customer_phone:
         status_messages = {
-            "Preparing":        f"🔵 مرحباً {customer_name}، بدأنا في تحضير طلبك الآن! 📦",
-            "Out for Delivery": f"🚚 مرحباً {customer_name}، الطلب ديالك خرج دابا مع الليفرور! المرجو البقاء قريباً من الهاتف.",
-            "Delivered":        f"✅ مرحباً {customer_name}، تم توصيل طلبك بنجاح. بالصحة والراحة وشكراً لاختيارك GreenGo!",
-            "Completed":        f"✅ مرحباً {customer_name}، تم إغلاق الطلب. نتمناو نشوفوك مرة أخرى في GreenGo!",
-            "Cancelled":        f"❌ عذراً {customer_name}، تم إلغاء طلبك. إذا كان هناك خطأ، المرجو التواصل معنا.",
+            "Preparing": (
+                f"🔵 مرحباً {customer_name}، بدأنا في تحضير طلبك الآن! 📦\n"
+                f"En préparation — commande #{short_id}"
+            ),
+            "Out for Delivery": (
+                f"🚚 Votre commande #{short_id} est en route!\n"
+                f"Votre livreur vous contactera bientôt.\n\n"
+                f"🛵 {customer_name}، طلبك خرج مع الليفرور!"
+            ),
+            "Delivered": (
+                f"✅ Votre commande #{short_id} a été livrée.\n"
+                f"Merci de votre confiance! 🌿 GreenGo Market\n\n"
+                f"بالصحة والراحة {customer_name}! 💚"
+            ),
+            "Completed": (
+                f"✅ مرحباً {customer_name}، تم إغلاق الطلب.\n"
+                f"نتمناو نشوفوك مرة أخرى في GreenGo! 🌿"
+            ),
+            "Cancelled": (
+                f"❌ عذراً {customer_name}، تم إلغاء طلبك #{short_id}.\n"
+                f"للاستفسار تواصل معنا على واتساب."
+            ),
         }
-        if final_status in status_messages:
-            send_whatsapp_message(customer_phone, status_messages[final_status])
+        msg = status_messages.get(final_status)
+        if msg:
+            send_whatsapp_message(customer_phone, msg)
 
     return {"order_id": order_id, "status": final_status, "updated": True}
 
