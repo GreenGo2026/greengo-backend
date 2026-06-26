@@ -46,6 +46,10 @@ class OrderResponse(BaseModel):
     created_at: str
     message: str
 
+class AssignDriverPayload(BaseModel):
+    driver_name: str
+    driver_phone: str
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _fmt_items(items: list[OrderItem]) -> str:
@@ -307,3 +311,63 @@ async def download_invoice(order_id: str, lang: str = "fr"):
         media_type="application/pdf",
         headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
+
+
+@router.patch("/{order_id}/driver", summary="Assign driver to an order")
+async def assign_driver(
+    order_id: str,
+    payload: AssignDriverPayload,
+    _: None = Depends(require_admin),
+) -> dict[str, Any]:
+    col = orders_col()
+    try:
+        result = await col.update_one(
+            {"_id": ObjectId(order_id)},
+            {"$set": {
+                "driver_name":  payload.driver_name.strip(),
+                "driver_phone": payload.driver_phone.strip(),
+                "updated_at":   datetime.now(tz=timezone.utc),
+            }},
+        )
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid order ID")
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail=f"Order {order_id} not found")
+    return {
+        "order_id":     order_id,
+        "driver_name":  payload.driver_name.strip(),
+        "driver_phone": payload.driver_phone.strip(),
+    }
+
+
+@router.get("/{order_id}/tracking", summary="Public order tracking — no auth required")
+async def track_order(order_id: str) -> dict[str, Any]:
+    col = orders_col()
+    doc = None
+    try:
+        doc = await col.find_one({"_id": ObjectId(order_id)})
+    except Exception:
+        pass
+    if doc is None:
+        try:
+            doc = await col.find_one({"_id": order_id})
+        except Exception:
+            pass
+    if doc is None:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    created_at = doc.get("created_at")
+    if isinstance(created_at, datetime):
+        created_at = created_at.isoformat()
+
+    raw_status = str(doc.get("status", "pending"))
+    normalized_status = raw_status.lower().replace(" ", "_")
+
+    return {
+        "order_id":           str(doc["_id"]),
+        "status":             normalized_status,
+        "driver_name":        doc.get("driver_name") or None,
+        "driver_phone":       doc.get("driver_phone") or None,
+        "estimated_delivery": doc.get("estimated_delivery") or None,
+        "created_at":         created_at or "",
+    }

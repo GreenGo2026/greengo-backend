@@ -103,7 +103,9 @@ class OrderModel(BaseModel):
 
     # Optional metadata
     notes:            str        = Field("",  description="Internal admin note")
-    livreur_name:     str        = Field("",  description="Name of the delivery person")
+    livreur_name:     str        = Field("",  description="Name of the delivery person (legacy)")
+    driver_name:      str | None = Field(None, description="Assigned driver name")
+    driver_phone:     str | None = Field(None, description="Assigned driver phone")
     payment_method:   str        = Field("COD",  description="COD | CARD_TPE")
     payment_confirmed: bool      = Field(False, description="True once livreur confirms cash received")
 
