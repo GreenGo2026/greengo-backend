@@ -516,15 +516,6 @@ if not _ASSETS_DIR.exists():
     _ASSETS_DIR = Path(__file__).resolve().parent / 'assets'
 app.mount('/static', StaticFiles(directory=str(_ASSETS_DIR)), name='static')
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization", "X-Requested-With", "X-Admin-Key"],
-    expose_headers=["Content-Disposition"],
-)
-
 # ── Security headers middleware ───────────────────────────────────────────────
 from starlette.middleware.base import BaseHTTPMiddleware as _BaseMiddleware
 from collections import defaultdict as _defaultdict
@@ -598,6 +589,18 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(RateLimitMiddleware)
 app.add_middleware(MaxBodySizeMiddleware)
+# CORSMiddleware MUST be added last so it becomes the outermost layer.
+# Middlewares added earlier (RateLimitMiddleware, MaxBodySizeMiddleware) return
+# early responses (429/413) that bypass inner middlewares — adding CORS last
+# ensures those responses still get Access-Control-Allow-Origin headers.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "X-Requested-With", "X-Admin-Key"],
+    expose_headers=["Content-Disposition"],
+)
 
 from slowapi.errors import RateLimitExceeded as _RateLimitExceeded
 from slowapi import _rate_limit_exceeded_handler as _slowapi_handler
