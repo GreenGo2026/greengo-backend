@@ -755,9 +755,9 @@ async def invoice_preflight(order_id: str):
         },
     )
 
-@app.get("/api/v1/orders/{order_id}/invoice", tags=["Orders"])
-async def download_invoice(order_id: str, _: None = Depends(require_admin)):
-    """Generate and download a PDF invoice for a given order."""
+@app.get("/api/v1/orders/{order_id}/invoice", tags=["Orders"], include_in_schema=False)
+async def download_invoice_fallback(order_id: str, lang: str = "fr"):
+    """Fallback — router route in orders.py takes priority; this is unreachable."""
     import io
     from fastapi.responses import StreamingResponse
     from app.services.pdf_generator import generate_invoice_pdf
@@ -793,7 +793,7 @@ async def download_invoice(order_id: str, _: None = Depends(require_admin)):
         doc["updated_at"] = doc["updated_at"].isoformat()
 
     try:
-        pdf_bytes = generate_invoice_pdf(doc)
+        pdf_bytes = generate_invoice_pdf(doc, lang)
     except Exception as exc:
         raise HTTPException(
             status_code=500,

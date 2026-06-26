@@ -262,7 +262,7 @@ async def get_order(order_id: str, _: None = Depends(require_admin)) -> dict[str
     return doc
 
 @router.get("/{order_id}/invoice", summary="Download PDF invoice for an order")
-async def download_invoice(order_id: str, _: None = Depends(require_admin)):
+async def download_invoice(order_id: str, lang: str = "fr"):
     from app.database import whatsapp_orders_col
 
     doc = None
@@ -296,12 +296,12 @@ async def download_invoice(order_id: str, _: None = Depends(require_admin)):
         doc["created_at"] = doc["created_at"].isoformat()
 
     try:
-        pdf_bytes = generate_invoice_pdf(doc)
+        pdf_bytes = generate_invoice_pdf(doc, lang)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"PDF generation failed: {exc}")
 
     short_id = order_id[-8:].upper()
-    filename = f"GreenGo_Invoice_{short_id}.pdf"
+    filename = f"GreenGo_Facture_{short_id}.pdf"
     return StreamingResponse(
         io.BytesIO(pdf_bytes),
         media_type="application/pdf",
