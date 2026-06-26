@@ -7,9 +7,11 @@ from datetime import datetime, timedelta, timezone
 
 import jwt as pyjwt
 import pyotp
-from fastapi import APIRouter, HTTPException, Response, status
+from fastapi import APIRouter, HTTPException, Request, Response, status
 from passlib.context import CryptContext
 from pydantic import BaseModel
+
+from app.auth import check_login_rate_limit, record_failed_login
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +79,10 @@ _COOKIE_MAX_AGE = 28800  # 8 hours
     response_model=TokenResponse,
     summary="Admin 2FA login — password + Google Authenticator code",
 )
-async def admin_login(body: LoginRequest, response: Response) -> TokenResponse:
+async def admin_login(body: LoginRequest, request: Request, response: Response) -> TokenResponse:
+    ip = request.client.host if request.client else "unknown"
+    check_login_rate_limit(ip)
+
     # Validate password via bcrypt
     try:
         pw_ok = _pwd_ctx.verify(body.password, _password_hash())
@@ -100,6 +105,7 @@ async def admin_login(body: LoginRequest, response: Response) -> TokenResponse:
 
     # Return the same error whether password or TOTP failed (no oracle)
     if not pw_ok or not totp_ok:
+        record_failed_login(ip)  # may raise 429 if hard-block threshold hit
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Identifiants invalides.",
