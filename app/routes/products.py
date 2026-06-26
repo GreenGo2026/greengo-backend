@@ -20,10 +20,13 @@ def _serialize(doc: dict[str, Any]) -> ProductResponse:
     Map a raw MongoDB document to ProductResponse.
     Handles both the canonical schema (name_ar, price_mad, in_stock)
     and any legacy field names written by older scripts.
+    Uses `or` fallbacks instead of dict.get defaults so that explicit null
+    values in MongoDB documents are treated the same as missing keys.
     """
     # price: canonical field is price_mad; fall back to price_per_unit
-    price = doc.get("price_mad") if doc.get("price_mad") is not None \
-            else doc.get("price_per_unit", 0.0)
+    price_raw = doc.get("price_mad")
+    if price_raw is None:
+        price_raw = doc.get("price_per_unit")
 
     # availability: canonical field is in_stock; fall back to is_available / available
     stock = doc.get("in_stock")
@@ -34,23 +37,24 @@ def _serialize(doc: dict[str, Any]) -> ProductResponse:
 
     # display name: canonical is name_ar; fall back to arabic_name / name
     name_ar = doc.get("name_ar") or doc.get("arabic_name") or doc.get("name", "")
-    step_val = doc.get("step")
+    step_val    = doc.get("step")
+    disc_raw    = doc.get("discount_pct")
 
     return ProductResponse(
-        id           = str(doc["_id"]),
-        name_ar      = name_ar,
-        name_fr      = doc.get("name_fr") or doc.get("name"),
-        category     = doc.get("category", "Other"),
-        price_mad    = float(price),
-        unit         = doc.get("unit", "kg"),
-        in_stock     = bool(stock),
-        created_at   = doc.get("created_at"),
-        image_url    = doc.get("image_url", ""),
-        image_status = doc.get("image_status", ""),
-        visible      = doc.get("visible", False),
-        on_sale      = bool(doc.get("on_sale", False)),
-        discount_pct = int(doc.get("discount_pct", 0)),
-        description_fr = str(doc.get("description_fr", "")),
+        id             = str(doc["_id"]),
+        name_ar        = name_ar,
+        name_fr        = doc.get("name_fr") or doc.get("name"),
+        category       = doc.get("category") or "Other",
+        price_mad      = float(price_raw) if price_raw is not None else 0.0,
+        unit           = doc.get("unit") or "kg",
+        in_stock       = bool(stock),
+        created_at     = doc.get("created_at"),
+        image_url      = doc.get("image_url") or "",
+        image_status   = doc.get("image_status") or "",
+        visible        = bool(doc.get("visible") or False),
+        on_sale        = bool(doc.get("on_sale") or False),
+        discount_pct   = int(disc_raw) if disc_raw is not None else 0,
+        description_fr = str(doc.get("description_fr") or ""),
         step           = float(step_val) if step_val is not None else None,
     )
 
