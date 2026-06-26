@@ -105,6 +105,9 @@ async def require_admin(
     if credentials and _verify_jwt(credentials.credentials):
         return
 
+    if _verify_jwt(request.cookies.get("admin_jwt", "")):
+        return
+
     expected = _admin_key()
     if api_key and secrets.compare_digest(api_key.encode(), expected.encode()):
         return

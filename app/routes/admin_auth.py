@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 
 import jwt as pyjwt
 import pyotp
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Response, status
 from passlib.context import CryptContext
 from pydantic import BaseModel
 
@@ -68,12 +68,16 @@ class TokenResponse(BaseModel):
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
+_COOKIE_NAME    = "admin_jwt"
+_COOKIE_MAX_AGE = 28800  # 8 hours
+
+
 @router.post(
     "/login",
     response_model=TokenResponse,
     summary="Admin 2FA login — password + Google Authenticator code",
 )
-async def admin_login(body: LoginRequest) -> TokenResponse:
+async def admin_login(body: LoginRequest, response: Response) -> TokenResponse:
     # Validate password via bcrypt
     try:
         pw_ok = _pwd_ctx.verify(body.password, _password_hash())
@@ -101,4 +105,21 @@ async def admin_login(body: LoginRequest) -> TokenResponse:
             detail="Identifiants invalides.",
         )
 
-    return TokenResponse(access_token=issue_admin_jwt())
+    token = issue_admin_jwt()
+    # SameSite=None + Secure required for cross-origin (Vercel ↔ Railway)
+    response.set_cookie(
+        key=_COOKIE_NAME,
+        value=token,
+        httponly=True,
+        secure=True,
+        samesite="none",
+        max_age=_COOKIE_MAX_AGE,
+        path="/",
+    )
+    return TokenResponse(access_token=token)
+
+
+@router.post("/logout", summary="Clear admin session cookie")
+async def admin_logout(response: Response) -> dict:
+    response.delete_cookie(key=_COOKIE_NAME, path="/", samesite="none", secure=True)
+    return {"ok": True}
