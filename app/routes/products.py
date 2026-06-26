@@ -162,8 +162,17 @@ async def update_product(
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail=f"Product '{product_id}' not found.")
 
-    doc = await products_col().find_one({"_id": oid})
+    try:
+        doc = await products_col().find_one({"_id": oid})
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"find_one failed: {type(exc).__name__}: {exc}")
     if doc is None:
         raise HTTPException(status_code=404, detail="Product disappeared after update.")
-    return _serialize(doc)
+    try:
+        return _serialize(doc)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"serialize failed: {type(exc).__name__}: {exc} — doc keys: {list(doc.keys())}",
+        )
 
