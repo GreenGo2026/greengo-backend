@@ -1,6 +1,7 @@
-﻿# app/routes/products.py
+# app/routes/products.py
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from typing import Any, Optional
 
@@ -11,6 +12,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from app.auth import require_admin
 from app.database import products_col
 from app.models.product import ProductResponse, UpdateProductRequest
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/products", tags=["Products v2"])
 
@@ -37,8 +40,8 @@ def _serialize(doc: dict[str, Any]) -> ProductResponse:
 
     # display name: canonical is name_ar; fall back to arabic_name / name
     name_ar = doc.get("name_ar") or doc.get("arabic_name") or doc.get("name", "")
-    step_val    = doc.get("step")
-    disc_raw    = doc.get("discount_pct")
+    step_val = doc.get("step")
+    disc_raw = doc.get("discount_pct")
 
     return ProductResponse(
         id             = str(doc["_id"]),
@@ -66,8 +69,8 @@ async def list_products(
 ) -> list[ProductResponse]:
     """
     Returns all products sorted: in-stock first, then by arabic name.
-    ?available_only=true  â€” exclude out-of-stock items.
-    ?category=Vegetables  â€” filter by category.
+    ?available_only=true  -- exclude out-of-stock items.
+    ?category=Vegetables  -- filter by category.
     """
     query: dict[str, Any] = {}
 
@@ -116,6 +119,16 @@ async def update_product(
     Always writes the canonical field name to normalise the document.
     """
     try:
+        return await _do_update(product_id, payload)
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("update_product crashed -- product_id=%s payload=%r", product_id, payload)
+        raise HTTPException(status_code=500, detail="Unexpected server error -- check Railway logs")
+
+
+async def _do_update(product_id: str, payload: UpdateProductRequest) -> ProductResponse:
+    try:
         oid = ObjectId(product_id)
     except InvalidId:
         raise HTTPException(status_code=400, detail=f"'{product_id}' is not a valid ObjectId.")
@@ -155,13 +168,13 @@ async def update_product(
     if payload.discount_pct is not None:
         updates["discount_pct"] = payload.discount_pct
 
-    if len(updates) == 1:  # only updated_at â€” nothing useful provided
+    if len(updates) == 1:  # only updated_at -- nothing useful provided
         raise HTTPException(status_code=400, detail="Provide at least one field to update.")
 
     try:
         result = await products_col().update_one({"_id": oid}, {"$set": updates})
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"DB update failed: {exc}")
+        raise HTTPException(status_code=500, detail=f"DB update failed: {type(exc).__name__}: {exc}")
 
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail=f"Product '{product_id}' not found.")
@@ -177,6 +190,5 @@ async def update_product(
     except Exception as exc:
         raise HTTPException(
             status_code=500,
-            detail=f"serialize failed: {type(exc).__name__}: {exc} — doc keys: {list(doc.keys())}",
+            detail=f"serialize failed: {type(exc).__name__}: {exc} -- doc keys: {list(doc.keys())}",
         )
-
