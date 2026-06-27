@@ -1,17 +1,20 @@
 # app/routes/admin_auth.py
 from __future__ import annotations
 
+import json
 import logging
 import os
+import re
 from datetime import datetime, timedelta, timezone
 
+import google.generativeai as genai
 import jwt as pyjwt
 import pyotp
-from fastapi import APIRouter, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from passlib.context import CryptContext
 from pydantic import BaseModel
 
-from app.auth import check_login_rate_limit, record_failed_login
+from app.auth import check_login_rate_limit, record_failed_login, require_admin
 
 logger = logging.getLogger(__name__)
 
@@ -129,3 +132,43 @@ async def admin_login(body: LoginRequest, request: Request, response: Response) 
 async def admin_logout(response: Response) -> dict:
     response.delete_cookie(key=_COOKIE_NAME, path="/", samesite="none", secure=True)
     return {"ok": True}
+
+
+# ── Gemini description generator ──────────────────────────────────────────────
+
+class GenerateDescriptionRequest(BaseModel):
+    product_name: str
+    category:     str = ""
+
+
+@router.post("/generate-description", summary="Generate product description via Gemini")
+async def generate_description(
+    body: GenerateDescriptionRequest,
+    _: None = Depends(require_admin),
+) -> dict:
+    api_key = os.getenv("GEMINI_API_KEY", "").strip().strip('"').strip("'")
+    if not api_key:
+        raise HTTPException(status_code=503, detail="GEMINI_API_KEY not configured.")
+
+    genai.configure(api_key=api_key)
+    model = genai.GenerativeModel("gemini-1.5-flash")
+
+    prompt = (
+        f"Génère une courte description produit (max 2 phrases, ton naturel et appétissant) "
+        f"pour un marché en ligne marocain de fruits et légumes frais.\n"
+        f"Produit: {body.product_name}\n"
+        f"Catégorie: {body.category}\n"
+        f'Réponds UNIQUEMENT en JSON valide: {{"description_fr": "..."}}'
+    )
+
+    try:
+        response = model.generate_content(prompt)
+        text = response.text or ""
+        match = re.search(r"\{[^{}]*\}", text, re.DOTALL)
+        if match:
+            data = json.loads(match.group())
+            return {"description_fr": str(data.get("description_fr", ""))}
+        return {"description_fr": ""}
+    except Exception as exc:
+        logger.warning("generate_description failed: %s", exc)
+        raise HTTPException(status_code=502, detail=f"Gemini error: {type(exc).__name__}")

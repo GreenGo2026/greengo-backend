@@ -39,6 +39,8 @@ class UpdateProductRequest(BaseModel):
     discount_pct:   Optional[int]   = None
     description_fr: Optional[str]   = None
     step:           Optional[float] = None
+    image_url:      Optional[str]   = None
+    image_status:   Optional[str]   = None
     # Legacy aliases so existing frontend calls still work
     price_per_unit: Optional[float] = Field(default=None, ge=0)
     available:      Optional[bool]  = None

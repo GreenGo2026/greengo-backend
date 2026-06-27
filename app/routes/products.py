@@ -197,6 +197,12 @@ async def _do_update(product_id: str, payload: UpdateProductRequest) -> ProductR
         updates["on_sale"] = payload.on_sale
     if payload.discount_pct is not None:
         updates["discount_pct"] = payload.discount_pct
+    if payload.image_url is not None:
+        updates["image_url"] = payload.image_url.strip()
+        if payload.image_status is None:
+            updates["image_status"] = "ready" if payload.image_url.strip() else "pending"
+    if payload.image_status is not None:
+        updates["image_status"] = payload.image_status
 
     if len(updates) == 1:  # only updated_at -- nothing useful provided
         raise HTTPException(status_code=400, detail="Provide at least one field to update.")
