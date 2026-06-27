@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import logging
+import re
+import unicodedata
 from datetime import datetime, timezone
 from typing import Any, Optional
 
@@ -16,6 +18,14 @@ from app.models.product import CreateProductRequest, ProductResponse, UpdateProd
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/products", tags=["Products v2"])
+
+
+def _generate_sku(name_fr: str) -> str:
+    """Slug-based SKU from French name — e.g. 'Crispy de poulet' → 'crispy-de-poulet'."""
+    normalized = unicodedata.normalize("NFD", name_fr.lower())
+    ascii_only = "".join(c for c in normalized if unicodedata.category(c) != "Mn")
+    slug = re.sub(r"[^a-z0-9]+", "-", ascii_only).strip("-")
+    return slug or "product"
 
 
 def _serialize(doc: dict[str, Any]) -> ProductResponse:
@@ -113,8 +123,9 @@ async def create_product(
     payload: CreateProductRequest,
     _: None = Depends(require_admin),
 ) -> ProductResponse:
+    name_fr_clean = payload.name_fr.strip()
     doc: dict[str, Any] = {
-        "name_fr":       payload.name_fr.strip(),
+        "name_fr":       name_fr_clean,
         "name_ar":       (payload.name_ar or "").strip(),
         "category":      payload.category,
         "price_mad":     round(payload.price_mad, 2),
@@ -127,6 +138,7 @@ async def create_product(
         "image_status":  "manual" if payload.image_url else "pending",
         "visible":       payload.visible,
         "step":          payload.step,
+        "sku":           _generate_sku(name_fr_clean),
         "created_at":    datetime.now(timezone.utc),
         "updated_at":    datetime.now(timezone.utc),
     }
