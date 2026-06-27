@@ -150,6 +150,21 @@ async def create_product(
     return _serialize(doc)
 
 
+@router.delete("/{product_id}", summary="Delete product")
+async def delete_product(
+    product_id: str,
+    _: None = Depends(require_admin),
+) -> dict:
+    try:
+        oid = ObjectId(product_id)
+    except InvalidId:
+        raise HTTPException(status_code=400, detail=f"'{product_id}' is not a valid ObjectId.")
+    result = await products_col().delete_one({"_id": oid})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Produit non trouvé.")
+    return {"deleted": True, "id": product_id}
+
+
 @router.patch("/{product_id}", response_model=ProductResponse, summary="Update product")
 async def update_product(
     product_id: str,

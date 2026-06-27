@@ -50,6 +50,7 @@ from app.routes.feed       import router as feed_router
 from app.routes.geocode    import router as geocode_router
 from app.routes.customers  import router as customers_router
 from app.routes.admin_auth import router as admin_auth_router
+from app.routes.media      import router as media_router
 
 # ---------------------------------------------------------------------------
 # New models imported directly from their modules (not via __init__)
@@ -609,6 +610,7 @@ app.state.limiter = _customers_limiter
 app.add_exception_handler(_RateLimitExceeded, _slowapi_handler)
 
 app.include_router(admin_auth_router)
+app.include_router(media_router)
 app.include_router(products_router)
 app.include_router(orders_router)
 app.include_router(webhook_router)
