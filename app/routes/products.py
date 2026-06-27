@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.auth import require_admin
 from app.database import products_col
-from app.models.product import ProductResponse, UpdateProductRequest
+from app.models.product import CreateProductRequest, ProductResponse, UpdateProductRequest
 
 logger = logging.getLogger(__name__)
 
@@ -105,6 +105,36 @@ async def get_product(product_id: str) -> ProductResponse:
     doc = await products_col().find_one({"_id": oid})
     if doc is None:
         raise HTTPException(status_code=404, detail=f"Product '{product_id}' not found.")
+    return _serialize(doc)
+
+
+@router.post("", response_model=ProductResponse, status_code=201, summary="Create product")
+async def create_product(
+    payload: CreateProductRequest,
+    _: None = Depends(require_admin),
+) -> ProductResponse:
+    doc: dict[str, Any] = {
+        "name_fr":       payload.name_fr.strip(),
+        "name_ar":       (payload.name_ar or "").strip(),
+        "category":      payload.category,
+        "price_mad":     round(payload.price_mad, 2),
+        "unit":          payload.unit,
+        "in_stock":      payload.in_stock,
+        "description_fr": (payload.description_fr or "").strip(),
+        "on_sale":       payload.on_sale,
+        "discount_pct":  payload.discount_pct,
+        "image_url":     (payload.image_url or "").strip(),
+        "image_status":  "manual" if payload.image_url else "pending",
+        "visible":       payload.visible,
+        "step":          payload.step,
+        "created_at":    datetime.now(timezone.utc),
+        "updated_at":    datetime.now(timezone.utc),
+    }
+    try:
+        result = await products_col().insert_one(doc)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"DB insert failed: {type(exc).__name__}: {exc}")
+    doc["_id"] = result.inserted_id
     return _serialize(doc)
 
 
