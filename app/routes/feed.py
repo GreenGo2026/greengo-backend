@@ -66,7 +66,7 @@ def make_description(name_fr: str, name_ar: str, category: str, unit: str) -> st
         f"{name_fr} — {cat_label} sélectionné chaque matin"
         f"{' vendu ' + unit_label if unit_label else ''}. "
         f"Livré frais à domicile à Salé et Rabat par GreenGo Market. "
-        f"Qualité garantie, livraison rapide en 2h."
+        f"Qualité garantie, livraison rapide en 30 min."
     )
 
 @router.get("/feed/google", summary="Google Shopping XML feed")
