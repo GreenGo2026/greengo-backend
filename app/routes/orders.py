@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from bson import ObjectId
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel, Field, AliasChoices
 
 import io
@@ -77,7 +77,7 @@ async def _server_price(name: str, client_fallback: float) -> float:
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @router.post("", response_model=OrderResponse, status_code=201, summary="Place a new order")
-async def create_order(payload: CreateOrderPayload) -> OrderResponse:
+async def create_order(payload: CreateOrderPayload, background_tasks: BackgroundTasks) -> OrderResponse:
 
     col      = orders_col()
     cust_col = customers_col()
@@ -169,7 +169,7 @@ async def create_order(payload: CreateOrderPayload) -> OrderResponse:
         f"سنتواصل معك قريباً للتوصيل. بالصحة والراحة!"
     )
 
-    send_whatsapp_message(payload.phone, msg)
+    background_tasks.add_task(send_whatsapp_message, payload.phone, msg)
 
     return OrderResponse(
         order_id=order_id,
@@ -202,6 +202,7 @@ async def list_orders(limit: int = 50, phone: str | None = None, _: None = Depen
 async def update_order_status(
     order_id: str,
     status: str,
+    background_tasks: BackgroundTasks,
     _: None = Depends(require_admin),
 ) -> dict[str, Any]:
     # Normalize: accept "out_for_delivery", "Out for Delivery", etc.
@@ -263,7 +264,7 @@ async def update_order_status(
         }
         msg = status_messages.get(final_status)
         if msg:
-            send_whatsapp_message(customer_phone, msg)
+            background_tasks.add_task(send_whatsapp_message, customer_phone, msg)
 
     return {"order_id": order_id, "status": final_status, "updated": True}
 
