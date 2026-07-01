@@ -201,10 +201,9 @@ async def list_orders(limit: int = 50, phone: str | None = None, _: None = Depen
 @router.patch("/{order_id}/status", summary="Update order status")
 async def update_order_status(
     order_id: str,
-    payload: UpdateStatusPayload,
+    status: str,
     _: None = Depends(require_admin),
 ) -> dict[str, Any]:
-    status = payload.status
     # Normalize: accept "out_for_delivery", "Out for Delivery", etc.
     status_map = {
         "pending":          "Pending",
