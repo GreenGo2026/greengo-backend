@@ -51,7 +51,8 @@ from app.routes.geocode    import router as geocode_router
 from app.routes.customers  import router as customers_router
 from app.routes.admin_auth import router as admin_auth_router
 from app.routes.media      import router as media_router
-from app.routes.paniers    import router as paniers_router
+from app.routes.paniers         import router as paniers_router
+from app.routes.whatsapp_admin  import router as whatsapp_admin_router
 
 # ---------------------------------------------------------------------------
 # New models imported directly from their modules (not via __init__)
@@ -622,6 +623,7 @@ app.include_router(admin_auth_router)
 app.include_router(media_router)
 app.include_router(products_router)
 app.include_router(paniers_router)
+app.include_router(whatsapp_admin_router)
 app.include_router(orders_router)
 app.include_router(webhook_router)
 app.include_router(storefront_router)
