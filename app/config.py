@@ -1,4 +1,4 @@
-﻿# app/config.py
+# app/config.py
 from __future__ import annotations
 
 import os
@@ -28,6 +28,12 @@ class Settings(BaseSettings):
     TWILIO_ACCOUNT_SID:   str = ""
     TWILIO_AUTH_TOKEN:    str = ""
     TWILIO_WHATSAPP_FROM: str = "whatsapp:+14155238886"
+
+    # ── Green-API (WhatsApp) ─────────────────────────────────────────────────
+    GREENAPI_INSTANCE_ID: str = ""
+    GREENAPI_TOKEN:       str = ""
+    GREEN_API_URL:        str = "https://api.green-api.com"
+    ADMIN_WHATSAPP_PHONE: str = ""   # receives new-order alerts, e.g. "0612345678"
 
     # ── Admin security ───────────────────────────────────────────────────────
     ADMIN_API_KEY:       str = ""

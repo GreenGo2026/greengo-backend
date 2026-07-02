@@ -12,7 +12,7 @@ from fastapi.responses import StreamingResponse
 from app.auth import require_admin
 from app.services.pdf_generator import generate_invoice_pdf
 from app.database import orders_col, customers_col, products_col
-from app.services.whatsapp import send_whatsapp_message
+from app.services.whatsapp import notify_customer_order, notify_admin_new_order, send_whatsapp_message
 
 router = APIRouter(prefix="/api/v1/orders", tags=["Orders"])
 
@@ -62,17 +62,22 @@ def _calculate_points(total_price: float) -> int:
     """10 MAD = 1 Point. Truncated (no rounding up)."""
     return int(total_price // 10)
 
-async def _server_price(name: str, client_fallback: float) -> float:
-    """Look up the authoritative price from MongoDB; fall back to client value if not found.
-    This prevents price manipulation: the client cannot lower prices by sending a fake price_per_unit."""
+async def _server_product_info(name: str, client_fallback_price: float) -> dict[str, Any]:
+    """
+    Look up authoritative price + image_url from MongoDB.
+    Prevents price manipulation: client cannot lower prices by sending a fake price_per_unit.
+    """
     col = products_col()
     doc = await col.find_one(
         {"$or": [{"name_fr": name}, {"name_ar": name}]},
-        {"price_mad": 1},
+        {"price_mad": 1, "image_url": 1},
     )
-    if doc and doc.get("price_mad"):
-        return float(doc["price_mad"])
-    return client_fallback
+    if doc:
+        return {
+            "price":     float(doc["price_mad"]) if doc.get("price_mad") else client_fallback_price,
+            "image_url": doc.get("image_url") or "",
+        }
+    return {"price": client_fallback_price, "image_url": ""}
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
@@ -83,16 +88,17 @@ async def create_order(payload: CreateOrderPayload, background_tasks: Background
     cust_col = customers_col()
     now      = datetime.now(tz=timezone.utc)
 
-    # ── 1. Resolve authoritative prices from DB (prevents price manipulation) ──
+    # ── 1. Resolve authoritative prices + image URLs from DB ─────────────────
     validated_items: list[dict[str, Any]] = []
     for item in payload.items:
-        real_price = await _server_price(item.name, item.price_per_unit)
+        info = await _server_product_info(item.name, item.price_per_unit)
         validated_items.append({
             "name":           item.name,
             "quantity":       item.quantity,
             "unit":           item.unit,
-            "price_per_unit": real_price,
-            "line_total":     round(item.quantity * real_price, 2),
+            "price_per_unit": info["price"],
+            "line_total":     round(item.quantity * info["price"], 2),
+            "image_url":      info["image_url"],
         })
     server_total = round(sum(i["line_total"] for i in validated_items), 2)
 
@@ -156,20 +162,35 @@ async def create_order(payload: CreateOrderPayload, background_tasks: Background
         # Loyalty failure must NOT block the order confirmation
         total_points = earned_points
 
-    # ── 4. WhatsApp notification (with loyalty info) ──────────────────────────
-    msg = (
-        f"🟢 مرحباً {payload.customer_name}!\n\n"
-        f"شكراً لاختيارك GreenGo Market 🛒\n"
-        f"لقد توصلنا بطلبك (رقم: {order_id[-6:]}) بنجاح.\n\n"
-        f"إجمالي الطلب: {server_total:.2f} درهم\n"
-        f"الحالة: قيد الانتظار (Pending) ⏳\n\n"
-        f"⭐ نقاط الولاء المكتسبة: +{earned_points} نقطة\n"
-        f"💰 رصيد نقاطك الإجمالي: {total_points} نقطة\n"
-        f"   (كل 10 درهم = نقطة واحدة)\n\n"
-        f"سنتواصل معك قريباً للتوصيل. بالصحة والراحة!"
+    # ── 4. WhatsApp notifications ─────────────────────────────────────────────
+    # 4a. Customer: rich confirmation with product list + loyalty
+    background_tasks.add_task(
+        notify_customer_order,
+        phone          = payload.phone,
+        customer_name  = payload.customer_name,
+        order_id       = order_id,
+        items          = validated_items,
+        total          = server_total,
+        address        = payload.address,
+        earned_points  = earned_points,
+        total_points   = total_points,
     )
 
-    background_tasks.add_task(send_whatsapp_message, payload.phone, msg)
+    # 4b. Admin: full alert with customer info, GPS, product images
+    gps_dict = (
+        {"lat": payload.gps_coordinates.lat, "lng": payload.gps_coordinates.lng}
+        if payload.gps_coordinates else None
+    )
+    background_tasks.add_task(
+        notify_admin_new_order,
+        order_id        = order_id,
+        customer_name   = payload.customer_name,
+        customer_phone  = payload.phone,
+        address         = payload.address,
+        gps             = gps_dict,
+        items           = validated_items,
+        total           = server_total,
+    )
 
     return OrderResponse(
         order_id=order_id,
