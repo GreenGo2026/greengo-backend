@@ -12,7 +12,6 @@ from __future__ import annotations
 import json
 import logging
 import os
-import time
 from datetime import datetime, timezone
 from typing import Any
 
@@ -204,19 +203,3 @@ def notify_admin_new_order(
         f"🕐 {now_str}"
     )
     send_whatsapp_message(admin_phone, text)
-
-    # Send product images (max 6, only items that have image_url)
-    sent = 0
-    for it in items:
-        if sent >= 6:
-            break
-        img_url = (it.get("image_url") or "").strip()
-        if not img_url:
-            continue
-        name    = it.get("name", "Produit")
-        ppu     = it.get("price_per_unit", 0.0)
-        unit    = it.get("unit", "")
-        caption = f"{name} — {ppu:.2f} MAD/{unit}"
-        time.sleep(0.5)  # avoid Green-API rate limit between rapid sends
-        send_file_by_url(admin_phone, img_url, f"{name}.jpg", caption)
-        sent += 1
