@@ -1,14 +1,16 @@
 # app/routes/paniers.py — shared panier compositions, stored in MongoDB
 from __future__ import annotations
 
+import re
+import unicodedata
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from app.auth import require_admin
-from app.database import paniers_col
+from app.database import paniers_col, products_col
 
 router = APIRouter(prefix="/api/v1/paniers", tags=["Paniers"])
 
@@ -123,3 +125,81 @@ async def update_panier(
     if result.matched_count == 0 and result.upserted_id is None:
         raise HTTPException(status_code=404, detail=f"Panier '{panier_id}' not found.")
     return {"ok": True, "id": panier_id}
+
+
+# ── Helpers ────────────────────────────────────────────────────────────────────
+
+def _normalize(s: str) -> str:
+    """Lowercase, strip accents, collapse whitespace."""
+    nfd = unicodedata.normalize("NFD", s.lower().strip())
+    ascii_only = "".join(c for c in nfd if unicodedata.category(c) != "Mn")
+    return re.sub(r"\s+", " ", ascii_only).strip()
+
+
+@router.post("/fix-labels", summary="Auto-fix panier item labels to match catalog name_fr (admin)")
+async def fix_labels(_: None = Depends(require_admin)) -> dict[str, Any]:
+    """
+    For every panier item, finds a catalog product whose name_fr matches the label
+    (normalized, accent-insensitive). Updates the label to the exact name_fr stored
+    in MongoDB so live price resolution works and 'Produit introuvable' disappears.
+
+    Only exact normalized matches are auto-applied — ambiguous / partial matches are
+    reported but NOT changed, so nothing gets silently mis-mapped.
+    """
+    prod_col = products_col()
+    pan_col  = paniers_col()
+
+    # Build lookup: normalized_name → exact name_fr
+    all_prods = await prod_col.find({}, {"_id": 0, "name_fr": 1}).to_list(length=1000)
+    norm_map: dict[str, str] = {}
+    for p in all_prods:
+        nf = (p.get("name_fr") or "").strip()
+        if nf:
+            norm_map[_normalize(nf)] = nf
+
+    # Process all paniers
+    all_paniers = await pan_col.find({}, {"_id": 0}).to_list(length=20)
+
+    total_fixed  = 0
+    total_unfixed = 0
+    report: list[dict[str, Any]] = []
+
+    for panier in all_paniers:
+        pan_id   = panier.get("id")
+        new_items: list[dict[str, Any]] = []
+        changes:  list[dict[str, Any]] = []
+
+        for item in panier.get("items", []):
+            label     = item.get("label", "")
+            norm_lbl  = _normalize(label)
+
+            if norm_lbl in norm_map:
+                # Exact normalized match — apply
+                correct = norm_map[norm_lbl]
+                if correct != label:
+                    changes.append({"from": label, "to": correct})
+                    item = {**item, "label": correct}
+            else:
+                # No exact match — report only, do NOT guess
+                changes.append({"label": label, "status": "not_found"})
+                total_unfixed += 1
+
+            new_items.append(item)
+
+        if any("to" in c for c in changes):
+            await pan_col.update_one(
+                {"id": pan_id},
+                {"$set": {"items": new_items, "updated_at": datetime.now(tz=timezone.utc)}},
+            )
+            fixed_count = sum(1 for c in changes if "to" in c)
+            total_fixed += fixed_count
+
+        if changes:
+            report.append({"panier": pan_id, "changes": changes})
+
+    return {
+        "ok":           True,
+        "total_fixed":  total_fixed,
+        "total_unfixed": total_unfixed,
+        "report":       report,
+    }

@@ -257,17 +257,14 @@ async def _do_update(product_id: str, payload: UpdateProductRequest) -> ProductR
         )
 
 
-@router.post("/corrections", summary="Apply catalog corrections (admin, one-shot)")
-async def apply_corrections(_: None = Depends(require_admin)) -> dict[str, Any]:
+async def _run_corrections() -> dict[str, Any]:
     """
-    Applies targeted unit + category fixes derived from the POS reference data.
-    Idempotent — safe to call multiple times.  Returns a diff of what changed.
+    Internal helper — same logic as apply_corrections but callable without HTTP context.
+    Used at startup and by the API route below.
     """
     col = products_col()
     now = datetime.now(timezone.utc)
 
-    # Each rule: (name_fragment, field, correct_value)
-    # name_fragment is matched case-insensitively against name_fr.
     RULES: list[tuple[str, str, Any]] = [
         # ── Units: sold by kg ──
         ("melon",          "unit", "kg"),
@@ -290,6 +287,9 @@ async def apply_corrections(_: None = Depends(require_admin)) -> dict[str, Any]:
         ("cerise",         "unit", "kg"),
         ("fraise",         "unit", "kg"),
         ("haricot",        "unit", "kg"),
+        ("navet",          "unit", "kg"),
+        ("laitue",         "unit", "kg"),
+        ("salade",         "unit", "kg"),
         # ── Units: sold per piece ──
         ("ananas",         "unit", "piece"),
         ("noix de coco",   "unit", "piece"),
@@ -308,7 +308,7 @@ async def apply_corrections(_: None = Depends(require_admin)) -> dict[str, Any]:
     ]
 
     changed: list[dict[str, Any]] = []
-    skipped: list[str] = []
+    skipped: int = 0
 
     all_docs = await col.find({}, {"_id": 1, "name_fr": 1, "unit": 1, "category": 1}).to_list(length=500)
 
@@ -321,23 +321,23 @@ async def apply_corrections(_: None = Depends(require_admin)) -> dict[str, Any]:
 
         for fragment, field, value in RULES:
             if fragment.lower() in name_fr:
-                current = doc.get(field)
-                if current != value:
+                if doc.get(field) != value:
                     updates[field] = value
 
         if updates:
             updates["updated_at"] = now
             await col.update_one({"_id": oid}, {"$set": updates})
-            changed.append({
-                "name_fr": doc.get("name_fr"),
-                "changes": updates,
-            })
+            changed.append({"name_fr": doc.get("name_fr"), "changes": {k: v for k, v in updates.items() if k != "updated_at"}})
         else:
-            skipped.append(doc.get("name_fr") or str(oid))
+            skipped += 1
 
-    return {
-        "ok": True,
-        "changed": len(changed),
-        "skipped": len(skipped),
-        "details": changed,
-    }
+    return {"ok": True, "changed": len(changed), "skipped": skipped, "details": changed}
+
+
+@router.post("/corrections", summary="Apply catalog corrections (admin, idempotent)")
+async def apply_corrections(_: None = Depends(require_admin)) -> dict[str, Any]:
+    """
+    Applies targeted unit + category fixes derived from the POS reference data.
+    Idempotent — safe to call multiple times.  Returns a diff of what changed.
+    """
+    return await _run_corrections()
