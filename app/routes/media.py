@@ -1,52 +1,48 @@
 # app/routes/media.py
 from __future__ import annotations
 
-import shutil
-import uuid
-from pathlib import Path
+import io
+import os
 
+import cloudinary
+import cloudinary.uploader
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
 from app.auth import require_admin
 
 router = APIRouter(prefix="/api/v1/admin", tags=["Media"])
 
-_ALLOWED_EXTS = {"jpg", "jpeg", "png", "webp"}
-_MAX_BYTES     = 2 * 1024 * 1024  # 2 MB
+cloudinary.config(
+    cloud_name=os.environ.get("CLOUDINARY_CLOUD_NAME"),
+    api_key=os.environ.get("CLOUDINARY_API_KEY"),
+    api_secret=os.environ.get("CLOUDINARY_API_SECRET"),
+)
+
+_ALLOWED_TYPES = {"image/jpeg", "image/png", "image/webp", "image/jpg"}
+_MAX_BYTES = 5 * 1024 * 1024  # 5 MB
 
 
-def _upload_dir() -> Path:
-    candidates = [
-        Path("/app/assets/products"),
-        Path(__file__).resolve().parent.parent.parent / "assets" / "products",
-    ]
-    for p in candidates:
-        try:
-            p.mkdir(parents=True, exist_ok=True)
-            return p
-        except Exception:
-            continue
-    raise RuntimeError("Cannot create upload directory.")
+@router.post("/upload-image", summary="Upload product image", dependencies=[Depends(require_admin)])
+async def upload_image(file: UploadFile = File(...)) -> dict:
+    if file.content_type not in _ALLOWED_TYPES:
+        raise HTTPException(status_code=400, detail=f"Type non supporté: {file.content_type}. Utilisez JPG, PNG ou WebP.")
 
+    contents = await file.read()
+    if len(contents) > _MAX_BYTES:
+        raise HTTPException(status_code=400, detail="Fichier trop grand (max 5 MB)")
 
-@router.post("/upload-image", summary="Upload product image")
-async def upload_image(
-    file: UploadFile = File(...),
-    _: None = Depends(require_admin),
-) -> dict:
-    ext = (file.filename or "").rsplit(".", 1)[-1].lower()
-    if ext not in _ALLOWED_EXTS:
-        raise HTTPException(status_code=400, detail="Format non supporté. Utilisez jpg, png ou webp.")
-
-    content = await file.read()
-    if len(content) > _MAX_BYTES:
-        raise HTTPException(status_code=413, detail="Image trop grande — maximum 2 Mo.")
-
-    filename = f"{uuid.uuid4().hex}.{ext}"
     try:
-        dest = _upload_dir() / filename
-        dest.write_bytes(content)
+        result = cloudinary.uploader.upload(
+            io.BytesIO(contents),
+            folder="greengo/products",
+            transformation=[{"width": 800, "height": 800, "crop": "limit"}],
+            resource_type="image",
+        )
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Échec de l'upload: {exc}")
+        raise HTTPException(status_code=500, detail=f"Erreur upload Cloudinary: {exc}")
 
-    return {"url": f"/static/products/{filename}"}
+    # Same on-the-fly delivery transformation used by the rest of the catalog
+    # (see scripts/upload_new_batch.py) -- keep it consistent across upload paths.
+    url = result["secure_url"].replace("/upload/", "/upload/f_auto,q_auto/", 1)
+
+    return {"url": url, "source": "cloudinary"}
