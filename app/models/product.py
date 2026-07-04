@@ -22,6 +22,7 @@ class ProductResponse(BaseModel):
     discount_pct: int   = 0
     description_fr: str = ""
     step:         Optional[float] = None
+    stock_qty:    Optional[int] = None
 
 
 class UpdateProductRequest(BaseModel):
@@ -41,6 +42,7 @@ class UpdateProductRequest(BaseModel):
     step:           Optional[float] = None
     image_url:      Optional[str]   = None
     image_status:   Optional[str]   = None
+    stock_qty:      Optional[int]   = Field(default=None, ge=0)
     # Legacy aliases so existing frontend calls still work
     price_per_unit: Optional[float] = Field(default=None, ge=0)
     available:      Optional[bool]  = None
@@ -61,3 +63,4 @@ class CreateProductRequest(BaseModel):
     image_url:     Optional[str]  = None
     step:          Optional[float] = None
     visible:       bool           = True
+    stock_qty:     Optional[int]  = Field(default=None, ge=0)
