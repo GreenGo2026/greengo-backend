@@ -4,9 +4,10 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
+from app.auth import require_admin
 from app.database import whatsapp_orders_col
 
 router = APIRouter(prefix="/api/v1/analytics", tags=["Analytics"])
@@ -52,6 +53,7 @@ def _threshold(period: str) -> Optional[datetime]:
 @router.get("", response_model=AnalyticsResponse, summary="Business analytics overview")
 async def get_analytics(
     period: str = Query(default="all", pattern="^(today|week|month|all)$"),
+    _: None = Depends(require_admin),
 ) -> AnalyticsResponse:
     col = whatsapp_orders_col()
     cutoff = _threshold(period)

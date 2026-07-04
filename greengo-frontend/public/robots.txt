@@ -1,7 +1,0 @@
-User-agent: *
-Disallow: /admin
-Disallow: /super-admin
-Disallow: /gestion
-Disallow: /gestion/super
-
-Sitemap: https://www.mygreengoo.com/sitemap.xml
