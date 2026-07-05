@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import re
 import unicodedata
 from datetime import datetime, timezone
@@ -18,6 +19,27 @@ from app.models.product import CreateProductRequest, ProductResponse, UpdateProd
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/products", tags=["Products v2"])
+
+# ── Auto weight-variant generation for Fromage/Olives ─────────────────────────
+VARIANT_CATEGORIES = {"Fromage", "Olives"}
+
+
+def compute_weight_variants(price_1kg: float) -> list[dict[str, Any]]:
+    """Auto-generate 250g/500g/1kg variants. 250g=25%, 500g=50% of 1kg,
+    rounded up to the nearest 0.5 MAD."""
+    def r(x: float) -> float:
+        return math.ceil(x * 2) / 2
+
+    return [
+        {"label": "250g", "price_mad": r(price_1kg * 0.25), "weight_g": 250, "sku": None, "in_stock": True},
+        {"label": "500g", "price_mad": r(price_1kg * 0.50), "weight_g": 500, "sku": None, "in_stock": True},
+        {"label": "1kg",  "price_mad": float(price_1kg),    "weight_g": 1000, "sku": None, "in_stock": True},
+    ]
+
+
+def should_auto_generate_variants(category: str, unit: str, existing_variants: Optional[list]) -> bool:
+    """Fromage/Olives + unit=kg + no variants yet."""
+    return category in VARIANT_CATEGORIES and unit == "kg" and not existing_variants
 
 
 def _generate_sku(name_fr: str) -> str:
@@ -127,11 +149,17 @@ async def create_product(
     _: None = Depends(require_admin),
 ) -> ProductResponse:
     name_fr_clean = payload.name_fr.strip()
+    price_rounded = round(payload.price_mad, 2)
+
+    variants = [v.model_dump() for v in payload.variants] if payload.variants else None
+    if should_auto_generate_variants(payload.category, payload.unit, variants):
+        variants = compute_weight_variants(price_rounded)
+
     doc: dict[str, Any] = {
         "name_fr":       name_fr_clean,
         "name_ar":       (payload.name_ar or "").strip(),
         "category":      payload.category,
-        "price_mad":     round(payload.price_mad, 2),
+        "price_mad":     price_rounded,
         "unit":          payload.unit,
         "in_stock":      payload.in_stock,
         "description_fr": (payload.description_fr or "").strip(),
@@ -142,7 +170,7 @@ async def create_product(
         "visible":       payload.visible,
         "step":          payload.step,
         "stock_qty":     payload.stock_qty,
-        "variants":      [v.model_dump() for v in payload.variants] if payload.variants else None,
+        "variants":      variants,
         "sku":           _generate_sku(name_fr_clean),
         "created_at":    datetime.now(timezone.utc),
         "updated_at":    datetime.now(timezone.utc),
@@ -195,6 +223,10 @@ async def _do_update(product_id: str, payload: UpdateProductRequest) -> ProductR
     except InvalidId:
         raise HTTPException(status_code=400, detail=f"'{product_id}' is not a valid ObjectId.")
 
+    existing = await products_col().find_one({"_id": oid})
+    if existing is None:
+        raise HTTPException(status_code=404, detail=f"Product '{product_id}' not found.")
+
     # Resolve price from canonical then legacy alias
     resolved_price = payload.price_mad \
         if payload.price_mad is not None \
@@ -239,6 +271,16 @@ async def _do_update(product_id: str, payload: UpdateProductRequest) -> ProductR
         updates["stock_qty"] = payload.stock_qty
     if payload.variants is not None:
         updates["variants"] = [v.model_dump() for v in payload.variants]
+    else:
+        # Auto-generate weight variants if this update turns the product into a
+        # Fromage/Olives-by-kg item that doesn't have any yet (e.g. unit changed
+        # from "piece" to "kg"). Uses the post-update category/unit/price.
+        new_category = updates.get("category", existing.get("category", ""))
+        new_unit = updates.get("unit", existing.get("unit", ""))
+        new_price = updates.get("price_mad", existing.get("price_mad", 0))
+        existing_variants = existing.get("variants")
+        if new_price > 0 and should_auto_generate_variants(new_category, new_unit, existing_variants):
+            updates["variants"] = compute_weight_variants(new_price)
 
     if len(updates) == 1:  # only updated_at -- nothing useful provided
         raise HTTPException(status_code=400, detail="Provide at least one field to update.")
