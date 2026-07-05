@@ -71,6 +71,7 @@ def _serialize(doc: dict[str, Any]) -> ProductResponse:
         description_fr = str(doc.get("description_fr") or ""),
         step           = float(step_val) if step_val is not None else None,
         stock_qty      = int(stock_qty_raw) if stock_qty_raw is not None else None,
+        variants       = doc.get("variants") or None,
     )
 
 
@@ -141,6 +142,7 @@ async def create_product(
         "visible":       payload.visible,
         "step":          payload.step,
         "stock_qty":     payload.stock_qty,
+        "variants":      [v.model_dump() for v in payload.variants] if payload.variants else None,
         "sku":           _generate_sku(name_fr_clean),
         "created_at":    datetime.now(timezone.utc),
         "updated_at":    datetime.now(timezone.utc),
@@ -235,6 +237,8 @@ async def _do_update(product_id: str, payload: UpdateProductRequest) -> ProductR
         updates["image_status"] = payload.image_status
     if payload.stock_qty is not None:
         updates["stock_qty"] = payload.stock_qty
+    if payload.variants is not None:
+        updates["variants"] = [v.model_dump() for v in payload.variants]
 
     if len(updates) == 1:  # only updated_at -- nothing useful provided
         raise HTTPException(status_code=400, detail="Provide at least one field to update.")

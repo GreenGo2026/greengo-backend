@@ -1,8 +1,17 @@
 # app/models/product.py
 from __future__ import annotations
 from datetime import datetime, timezone
-from typing import Optional
+from typing import List, Optional
 from pydantic import BaseModel, Field
+
+
+class ProductVariant(BaseModel):
+    """One weight/price option for a product (e.g. 250g / 500g / 1kg)."""
+    label:     str            # e.g. "250g", "500g", "1kg", "rabaa"
+    price_mad: float          # price for this weight
+    weight_g:  Optional[int] = None
+    sku:       Optional[str] = None
+    in_stock:  bool = True
 
 
 class ProductResponse(BaseModel):
@@ -23,6 +32,7 @@ class ProductResponse(BaseModel):
     description_fr: str = ""
     step:         Optional[float] = None
     stock_qty:    Optional[int] = None
+    variants:     Optional[List[ProductVariant]] = None
 
 
 class UpdateProductRequest(BaseModel):
@@ -43,6 +53,7 @@ class UpdateProductRequest(BaseModel):
     image_url:      Optional[str]   = None
     image_status:   Optional[str]   = None
     stock_qty:      Optional[int]   = Field(default=None, ge=0)
+    variants:       Optional[List[ProductVariant]] = None
     # Legacy aliases so existing frontend calls still work
     price_per_unit: Optional[float] = Field(default=None, ge=0)
     available:      Optional[bool]  = None
@@ -64,3 +75,4 @@ class CreateProductRequest(BaseModel):
     step:          Optional[float] = None
     visible:       bool           = True
     stock_qty:     Optional[int]  = Field(default=None, ge=0)
+    variants:      Optional[List[ProductVariant]] = None
