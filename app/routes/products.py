@@ -20,8 +20,8 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/products", tags=["Products v2"])
 
-# ── Auto weight-variant generation for Fromage/Olives ─────────────────────────
-VARIANT_CATEGORIES = {"Fromage", "Olives"}
+# ── Auto weight-variant generation for Fromage/Olives/Volailles ──────────────
+VARIANT_CATEGORIES = {"Fromage", "Olives", "Volailles"}
 
 
 def compute_weight_variants(price_1kg: float) -> list[dict[str, Any]]:
