@@ -263,13 +263,21 @@ async def track_order_public(order_ref: str | None = None, phone: str | None = N
     results: list[dict[str, Any]] = []
     for d in docs:
         created = d.get("created_at")
+        # Normalize to lowercase snake_case (matches GET /{order_id}/tracking's
+        # convention below) -- the DB stores display-cased values like
+        # "Out for Delivery".
+        raw_status = str(d.get("status", "Pending"))
+        normalized_status = raw_status.lower().replace(" ", "_")
         results.append({
-            "order_ref":     str(d["_id"])[-6:].upper(),
-            "status":        d.get("status", "Pending"),
-            "created_at":    created.isoformat() if isinstance(created, datetime) else str(created or ""),
-            "total_price":   d.get("total_price", 0),
-            "customer_name": d.get("customer_name", ""),
-            "items_count":   len(d.get("items", [])),
+            "order_ref":          str(d["_id"])[-6:].upper(),
+            "status":             normalized_status,
+            "created_at":         created.isoformat() if isinstance(created, datetime) else str(created or ""),
+            "total_price":        d.get("total_price", 0),
+            "customer_name":      d.get("customer_name", ""),
+            "items_count":        len(d.get("items", [])),
+            "driver_name":        d.get("driver_name") or None,
+            "driver_phone":       d.get("driver_phone") or None,
+            "estimated_delivery": d.get("estimated_delivery") or None,
         })
     return results
 
