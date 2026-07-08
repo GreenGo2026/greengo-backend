@@ -104,6 +104,7 @@ def orders_col()          -> AsyncIOMotorCollection: return _col("orders")
 def whatsapp_orders_col() -> AsyncIOMotorCollection: return _col("whatsapp_orders")
 def customers_col()       -> AsyncIOMotorCollection: return _col("customers")
 def paniers_col()         -> AsyncIOMotorCollection: return _col("paniers")
+def reviews_col()         -> AsyncIOMotorCollection: return _col("reviews")
 
 
 # ---------------------------------------------------------------------------
