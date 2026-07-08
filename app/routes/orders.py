@@ -219,6 +219,61 @@ async def list_orders(limit: int = 50, phone: str | None = None, _: None = Depen
     return docs
 
 
+# NOTE: this must stay declared before GET /{order_id} below -- FastAPI matches
+# routes in declaration order, so a request to /orders/track would otherwise be
+# swallowed by /{order_id} (with order_id="track") and always 404.
+@router.get("/track", summary="Public order tracking by reference or phone — no auth required")
+async def track_order_public(order_ref: str | None = None, phone: str | None = None) -> list[dict[str, Any]]:
+    """
+    Customer self-service lookup. Orders have no "order_number" field --
+    the identifier customers actually have is the #{short_id} (last 6 chars
+    of the Mongo _id, uppercased) sent in their WhatsApp confirmation
+    (see notify_customer_order in app/services/whatsapp.py). Matching that
+    suffix can't be done as a Mongo query on the ObjectId itself, so we
+    filter in Python over a bounded candidate set instead of building a
+    regex from raw user input (which would also be a ReDoS/injection risk).
+    """
+    if not order_ref and not phone:
+        raise HTTPException(
+            status_code=400,
+            detail="Fournissez une référence de commande ou un numéro de téléphone",
+        )
+
+    col = orders_col()
+    query: dict[str, Any] = {}
+    if phone:
+        p = phone.strip()
+        if p.startswith("0") and len(p) == 10:
+            p = "+212" + p[1:]
+        query = {"$or": [{"phone": p}, {"phone": phone.strip()}]}
+
+    docs = await col.find(query).sort("created_at", -1).limit(200).to_list(length=200)
+
+    if order_ref:
+        ref = order_ref.strip().upper()
+        docs = [d for d in docs if str(d["_id"])[-6:].upper() == ref]
+
+    docs = docs[:5]
+    if not docs:
+        raise HTTPException(
+            status_code=404,
+            detail="Aucune commande trouvée. Vérifiez la référence ou le numéro de téléphone.",
+        )
+
+    results: list[dict[str, Any]] = []
+    for d in docs:
+        created = d.get("created_at")
+        results.append({
+            "order_ref":     str(d["_id"])[-6:].upper(),
+            "status":        d.get("status", "Pending"),
+            "created_at":    created.isoformat() if isinstance(created, datetime) else str(created or ""),
+            "total_price":   d.get("total_price", 0),
+            "customer_name": d.get("customer_name", ""),
+            "items_count":   len(d.get("items", [])),
+        })
+    return results
+
+
 @router.patch("/{order_id}/status", summary="Update order status")
 async def update_order_status(
     order_id: str,
