@@ -55,7 +55,7 @@ def _looks_like_order(text: str) -> bool:
 
 
 # ── Auto-reply message ────────────────────────────────────────────────────────
-SUPPORT_PHONE = "212664397031"
+SUPPORT_PHONE = "212664500789"
 
 AUTO_REPLY = (
     "مرحباً بك في GreenGo Market 🥬\n\n"
