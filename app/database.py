@@ -105,6 +105,7 @@ def whatsapp_orders_col() -> AsyncIOMotorCollection: return _col("whatsapp_order
 def customers_col()       -> AsyncIOMotorCollection: return _col("customers")
 def paniers_col()         -> AsyncIOMotorCollection: return _col("paniers")
 def reviews_col()         -> AsyncIOMotorCollection: return _col("reviews")
+def newsletter_col()      -> AsyncIOMotorCollection: return _col("newsletter")
 
 
 # ---------------------------------------------------------------------------
@@ -137,6 +138,10 @@ async def _init_indexes() -> None:
             IndexModel([("customer_phone", ASCENDING)],  name="idx_wa_phone"),
             IndexModel([("status",         ASCENDING)],  name="idx_wa_status"),
             IndexModel([("created_at",     DESCENDING)], name="idx_wa_created_desc"),
+        ])
+
+        await newsletter_col().create_indexes([
+            IndexModel([("email", ASCENDING)], unique=True, name="uq_newsletter_email"),
         ])
 
         logger.info("âœ… [DB] All indexes verified / created.")

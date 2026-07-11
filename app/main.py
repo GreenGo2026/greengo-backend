@@ -54,6 +54,7 @@ from app.routes.media      import router as media_router
 from app.routes.paniers         import router as paniers_router
 from app.routes.whatsapp_admin  import router as whatsapp_admin_router
 from app.routes.reviews         import router as reviews_router
+from app.routes.newsletter      import router as newsletter_router
 
 # ---------------------------------------------------------------------------
 # New models imported directly from their modules (not via __init__)
@@ -633,6 +634,7 @@ app.include_router(feed_router)
 app.include_router(geocode_router)
 app.include_router(customers_router)
 app.include_router(reviews_router)
+app.include_router(newsletter_router)
 
 
 # ===========================================================================
