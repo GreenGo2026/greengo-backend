@@ -16,6 +16,18 @@ from app.services.whatsapp import notify_customer_order, notify_admin_new_order,
 
 router = APIRouter(prefix="/api/v1/orders", tags=["Orders"])
 
+# ── Delivery zones ────────────────────────────────────────────────────────────
+# Fixed per-zone delivery fee, in MAD. Must mirror DELIVERY_FEES in
+# src/store/cartStore.ts on the frontend -- the client-supplied delivery_fee
+# is never trusted, only used to detect a stale/tampered value (see below).
+DELIVERY_FEES: dict[str, float] = {
+    "laayayda": 0,
+    "sale":     20,
+    "rabat":    30,
+    "temara":   40,
+}
+DEFAULT_DELIVERY_ZONE = "sale"
+
 # ── Pydantic models ───────────────────────────────────────────────────────────
 
 class GPSCoordinates(BaseModel):
@@ -38,6 +50,8 @@ class CreateOrderPayload(BaseModel):
     address: str = Field(validation_alias=AliasChoices("address", "delivery_address"))
     gps_coordinates: GPSCoordinates | None = None
     items: list[OrderItem]
+    delivery_zone: str | None = None
+    delivery_fee: float | None = 0
     total_price: float
 
 class OrderResponse(BaseModel):
@@ -102,6 +116,14 @@ async def create_order(payload: CreateOrderPayload, background_tasks: Background
         })
     server_total = round(sum(i["line_total"] for i in validated_items), 2)
 
+    # ── 1b. Resolve authoritative delivery fee from zone ──────────────────────
+    # The client's delivery_fee is never trusted -- it's only ever used as a
+    # display value on the frontend. The fee actually charged is always
+    # re-derived here from delivery_zone, same as prices above.
+    zone = (payload.delivery_zone or DEFAULT_DELIVERY_ZONE).strip().lower()
+    delivery_fee = DELIVERY_FEES.get(zone, DELIVERY_FEES[DEFAULT_DELIVERY_ZONE])
+    final_total = round(server_total + delivery_fee, 2)
+
     # ── 2. Build order document ───────────────────────────────────────────────
     doc: dict[str, Any] = {
         "customer_name": payload.customer_name.strip(),
@@ -111,11 +133,14 @@ async def create_order(payload: CreateOrderPayload, background_tasks: Background
             {"lat": payload.gps_coordinates.lat, "lng": payload.gps_coordinates.lng}
             if payload.gps_coordinates else None
         ),
-        "items": validated_items,
-        "total_price": server_total,
-        "status":      "Pending",
-        "created_at":  now,
-        "updated_at":  now,
+        "items":         validated_items,
+        "delivery_zone": zone,
+        "delivery_fee":  delivery_fee,
+        "subtotal":      server_total,
+        "total_price":   final_total,
+        "status":        "Pending",
+        "created_at":    now,
+        "updated_at":    now,
     }
 
     try:
@@ -147,7 +172,7 @@ async def create_order(payload: CreateOrderPayload, background_tasks: Background
                 "$push": {
                     "orders": {
                         "order_id":      order_id,
-                        "total_price":   server_total,
+                        "total_price":   final_total,
                         "points_earned": earned_points,
                         "points_used":   points_to_deduct,
                         "date":          now,
@@ -170,7 +195,10 @@ async def create_order(payload: CreateOrderPayload, background_tasks: Background
         customer_name  = payload.customer_name,
         order_id       = order_id,
         items          = validated_items,
-        total          = server_total,
+        subtotal       = server_total,
+        delivery_zone  = zone,
+        delivery_fee   = delivery_fee,
+        total          = final_total,
         address        = payload.address,
         earned_points  = earned_points,
         total_points   = total_points,
@@ -189,7 +217,10 @@ async def create_order(payload: CreateOrderPayload, background_tasks: Background
         address         = payload.address,
         gps             = gps_dict,
         items           = validated_items,
-        total           = server_total,
+        subtotal        = server_total,
+        delivery_zone   = zone,
+        delivery_fee    = delivery_fee,
+        total           = final_total,
     )
 
     return OrderResponse(

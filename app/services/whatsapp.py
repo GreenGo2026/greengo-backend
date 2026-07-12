@@ -111,6 +111,9 @@ def notify_customer_order(
     customer_name: str,
     order_id: str,
     items: list[dict[str, Any]],
+    subtotal: float,
+    delivery_zone: str,
+    delivery_fee: float,
     total: float,
     address: str,
     earned_points: int,
@@ -118,7 +121,7 @@ def notify_customer_order(
 ) -> None:
     """
     Rich order confirmation to the customer.
-    Includes product list, total, delivery address, and loyalty points.
+    Includes product list, subtotal, delivery fee, total, address, and loyalty points.
     """
     short_id = order_id[-6:].upper()
 
@@ -132,6 +135,10 @@ def notify_customer_order(
         lines.append(f"   ▪ {name} × {qty} {unit} — {line:.2f} MAD")
 
     products_block = "\n".join(lines) if lines else "   —"
+    delivery_line = (
+        "🚚 التوصيل: مجاني" if delivery_fee == 0
+        else f"🚚 التوصيل ({delivery_zone}): {delivery_fee:.2f} MAD"
+    )
 
     msg = (
         f"🟢 مرحباً {customer_name}!\n\n"
@@ -139,6 +146,8 @@ def notify_customer_order(
         f"رقم طلبك: #{short_id}\n\n"
         f"📦 *تفاصيل طلبك:*\n"
         f"{products_block}\n\n"
+        f"💵 المجموع الفرعي: {subtotal:.2f} MAD\n"
+        f"{delivery_line}\n"
         f"💰 إجمالي الطلب: *{total:.2f} MAD*\n"
         f"📍 عنوان التوصيل: {address}\n"
         f"⏳ الحالة: قيد الانتظار (Pending)\n\n"
@@ -158,6 +167,9 @@ def notify_admin_new_order(
     address: str,
     gps: dict[str, float] | None,
     items: list[dict[str, Any]],
+    subtotal: float,
+    delivery_zone: str,
+    delivery_fee: float,
     total: float,
 ) -> None:
     """
@@ -188,6 +200,10 @@ def notify_admin_new_order(
         product_lines.append(f"   ▪ {name} × {qty} {unit} — {total_line:.2f} MAD")
 
     products_block = "\n".join(product_lines) if product_lines else "   —"
+    delivery_line = (
+        f"🚚 Livraison ({delivery_zone}): "
+        + ("Gratuite" if delivery_fee == 0 else f"{delivery_fee:.2f} MAD")
+    )
 
     text = (
         f"🛒 *طلب جديد — GreenGo Market* 🟢\n\n"
@@ -198,7 +214,10 @@ def notify_admin_new_order(
         f"{gps_line}\n\n"
         f"📦 *المنتجات:*\n"
         f"{products_block}\n\n"
-        f"💰 *المجموع: {total:.2f} MAD*\n"
+        f"🧾 Sous-total: {subtotal:.2f} MAD\n"
+        f"{delivery_line}\n"
+        f"💰 *Total: {total:.2f} MAD*\n"
+        f"   (dont livraison: {delivery_fee:.2f} MAD)\n"
         f"🔢 Commande: #{short_id}\n"
         f"🕐 {now_str}"
     )
