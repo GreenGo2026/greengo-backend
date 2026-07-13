@@ -91,6 +91,7 @@ class BasketUpdate(BaseModel):
     items: list[BasketItem]
     price: Optional[float] = None          # admin-set fixed pack price -- authoritative
     original_price: Optional[float] = None  # strikethrough reference, optional
+    meta_line: Optional[str] = None         # admin-set subtitle, e.g. "4 personnes · 1 semaine"
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -106,6 +107,7 @@ def _serialize_panier(doc: dict[str, Any]) -> dict[str, Any]:
         "items":      doc.get("items", []),
         "price":          doc.get("price"),
         "original_price": doc.get("original_price"),
+        "meta_line":      doc.get("meta_line"),
         "updated_at": str(doc.get("updated_at", "")) if doc.get("updated_at") else None,
     }
 
