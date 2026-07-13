@@ -93,8 +93,21 @@ class BasketUpdate(BaseModel):
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
-@router.get("", summary="List all paniers (admin)")
-async def list_paniers(_: None = Depends(require_admin)) -> list[dict[str, Any]]:
+def _serialize_panier(doc: dict[str, Any]) -> dict[str, Any]:
+    """Defensive defaults -- covers any doc written before a field existed."""
+    return {
+        "id":         doc.get("id", ""),
+        "order":      doc.get("order", 99),
+        "title":      doc.get("title", ""),
+        "persons":    doc.get("persons", 0),
+        "accent":     doc.get("accent", "#2E8B57"),
+        "items":      doc.get("items", []),
+        "updated_at": str(doc.get("updated_at", "")) if doc.get("updated_at") else None,
+    }
+
+
+@router.get("", summary="List all paniers (public -- basket composition has no sensitive data)")
+async def list_paniers() -> list[dict[str, Any]]:
     col = paniers_col()
     docs = await col.find({}, {"_id": 0}).sort("order", 1).to_list(length=20)
     if not docs:
@@ -102,7 +115,7 @@ async def list_paniers(_: None = Depends(require_admin)) -> list[dict[str, Any]]
         to_insert = [dict(b) for b in DEFAULT_BASKETS]
         await col.insert_many(to_insert)
         return DEFAULT_BASKETS
-    return docs
+    return [_serialize_panier(d) for d in docs]
 
 
 @router.put("/{panier_id}", summary="Update a panier (admin)")
