@@ -89,6 +89,8 @@ class BasketUpdate(BaseModel):
     persons: int
     accent: str
     items: list[BasketItem]
+    price: Optional[float] = None          # admin-set fixed pack price -- authoritative
+    original_price: Optional[float] = None  # strikethrough reference, optional
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -102,6 +104,8 @@ def _serialize_panier(doc: dict[str, Any]) -> dict[str, Any]:
         "persons":    doc.get("persons", 0),
         "accent":     doc.get("accent", "#2E8B57"),
         "items":      doc.get("items", []),
+        "price":          doc.get("price"),
+        "original_price": doc.get("original_price"),
         "updated_at": str(doc.get("updated_at", "")) if doc.get("updated_at") else None,
     }
 
@@ -114,7 +118,7 @@ async def list_paniers() -> list[dict[str, Any]]:
         # First run: seed defaults and return them
         to_insert = [dict(b) for b in DEFAULT_BASKETS]
         await col.insert_many(to_insert)
-        return DEFAULT_BASKETS
+        return [_serialize_panier(d) for d in DEFAULT_BASKETS]
     return [_serialize_panier(d) for d in docs]
 
 

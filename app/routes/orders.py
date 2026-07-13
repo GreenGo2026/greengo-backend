@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
 from typing import Any
 
@@ -11,7 +12,7 @@ import io
 from fastapi.responses import StreamingResponse
 from app.auth import require_admin
 from app.services.pdf_generator import generate_invoice_pdf
-from app.database import orders_col, customers_col, products_col
+from app.database import orders_col, customers_col, products_col, paniers_col
 from app.services.whatsapp import notify_customer_order, notify_admin_new_order, send_whatsapp_message
 
 router = APIRouter(prefix="/api/v1/orders", tags=["Orders"])
@@ -80,6 +81,13 @@ async def _server_product_info(name: str, client_fallback_price: float) -> dict[
     """
     Look up authoritative price + image_url from MongoDB.
     Prevents price manipulation: client cannot lower prices by sending a fake price_per_unit.
+
+    Panier ("pack") cart lines have no matching product row -- they're added as a
+    single line named after the basket's title, at the admin-set panier.price. If
+    we fell through to client_fallback_price for those (like any other unmatched
+    name), a tampered request could submit any price for the whole pack. So an
+    unmatched name is checked against paniers.title next, before ever trusting
+    the client-supplied price.
     """
     col = products_col()
     doc = await col.find_one(
@@ -91,6 +99,14 @@ async def _server_product_info(name: str, client_fallback_price: float) -> dict[
             "price":     float(doc["price_mad"]) if doc.get("price_mad") else client_fallback_price,
             "image_url": doc.get("image_url") or "",
         }
+
+    panier = await paniers_col().find_one(
+        {"title": {"$regex": f"^{re.escape(name)}$", "$options": "i"}},
+        {"price": 1},
+    )
+    if panier and panier.get("price"):
+        return {"price": float(panier["price"]), "image_url": ""}
+
     return {"price": client_fallback_price, "image_url": ""}
 
 # ── Routes ────────────────────────────────────────────────────────────────────
