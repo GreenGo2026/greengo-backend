@@ -23,6 +23,63 @@ router = APIRouter(prefix="/api/v1/products", tags=["Products v2"])
 # ── Auto weight-variant generation for Fromage/Olives/Volailles ──────────────
 VARIANT_CATEGORIES = {"Fromage", "Olives", "Volailles"}
 
+# ── Catalog correction rules (name fragment → field → value) ─────────────────
+CORRECTION_RULES: list[tuple[str, str, Any]] = [
+    # ── Units: sold by kg ──
+    ("melon",          "unit", "kg"),
+    ("pastèque",       "unit", "kg"),
+    ("pasteque",       "unit", "kg"),
+    ("potiron",        "unit", "kg"),
+    ("betterave",      "unit", "kg"),
+    ("patate douce",   "unit", "kg"),
+    ("concombre",      "unit", "kg"),
+    ("courgette",      "unit", "kg"),
+    ("poivron",        "unit", "kg"),
+    ("brocoli",        "unit", "kg"),
+    ("chou fleur",     "unit", "kg"),
+    ("choufleur",      "unit", "kg"),
+    ("aubergine",      "unit", "kg"),
+    ("tomate",         "unit", "kg"),
+    ("carotte",        "unit", "kg"),
+    ("oignon",         "unit", "kg"),
+    ("raisin",         "unit", "kg"),
+    ("cerise",         "unit", "kg"),
+    ("fraise",         "unit", "kg"),
+    ("haricot",        "unit", "kg"),
+    ("navet",          "unit", "kg"),
+    ("laitue",         "unit", "kg"),
+    ("salade",         "unit", "kg"),
+    # ── Units: sold per piece ──
+    ("ananas",         "unit", "piece"),
+    ("noix de coco",   "unit", "piece"),
+    ("pamplemousse",   "unit", "piece"),
+    # ── Categories: spices/ground powders ──
+    ("coriandre moulue",  "category", "Épices"),
+    ("coriadre moulue",   "category", "Épices"),
+    ("cumin moulu",       "category", "Épices"),
+    ("ras el hanout",     "category", "Épices"),
+    ("tkhlita",           "category", "Épices"),
+    ("poivre",            "category", "Épices"),
+    ("gingembre moulu",   "category", "Épices"),
+    ("paprika",           "category", "Épices"),
+    ("cannelle",          "category", "Épices"),
+    ("safran",            "category", "Épices"),
+]
+
+# Products whose name contains one of these are bottled/liquid items -- a
+# name-fragment match like "melon" (intended for the fruit, sold by kg) would
+# otherwise also catch "Panaché Melon 1L" and force a juice bottle to unit=kg.
+LIQUID_INDICATORS = [
+    "panache", "panaché", "jus", "juice",
+    " ml", " cl", " l ", "1l", "250ml", "500ml",
+    "liquide", "boisson",
+]
+
+
+def _is_liquid_product(name_fr: str) -> bool:
+    name_lower = name_fr.lower()
+    return any(indicator in name_lower for indicator in LIQUID_INDICATORS)
+
 
 def compute_weight_variants(price_1kg: float) -> list[dict[str, Any]]:
     """Auto-generate 250g/500g/1kg variants. 250g=25%, 500g=50% of 1kg,
@@ -308,55 +365,21 @@ async def _do_update(product_id: str, payload: UpdateProductRequest) -> ProductR
         )
 
 
+# L99 RULE: this function is no longer called automatically on startup.
+# Reason: automatic product modifications violate the admin-only rule
+# established 2026-07-14. Auto-corrections were causing false positives
+# (e.g. "Panaché Melon 1L" matching the "melon" -> unit=kg rule meant for
+# the actual fruit). To apply corrections, an admin must explicitly call
+#   POST /api/v1/products/corrections   (X-Admin-Key header)
+# Startup now calls _run_corrections_audit() instead, which only logs what
+# would change -- it never writes to the database.
 async def _run_corrections() -> dict[str, Any]:
     """
     Internal helper — same logic as apply_corrections but callable without HTTP context.
-    Used at startup and by the API route below.
+    Admin-triggered only (see L99 note above) -- not called at startup.
     """
     col = products_col()
     now = datetime.now(timezone.utc)
-
-    RULES: list[tuple[str, str, Any]] = [
-        # ── Units: sold by kg ──
-        ("melon",          "unit", "kg"),
-        ("pastèque",       "unit", "kg"),
-        ("pasteque",       "unit", "kg"),
-        ("potiron",        "unit", "kg"),
-        ("betterave",      "unit", "kg"),
-        ("patate douce",   "unit", "kg"),
-        ("concombre",      "unit", "kg"),
-        ("courgette",      "unit", "kg"),
-        ("poivron",        "unit", "kg"),
-        ("brocoli",        "unit", "kg"),
-        ("chou fleur",     "unit", "kg"),
-        ("choufleur",      "unit", "kg"),
-        ("aubergine",      "unit", "kg"),
-        ("tomate",         "unit", "kg"),
-        ("carotte",        "unit", "kg"),
-        ("oignon",         "unit", "kg"),
-        ("raisin",         "unit", "kg"),
-        ("cerise",         "unit", "kg"),
-        ("fraise",         "unit", "kg"),
-        ("haricot",        "unit", "kg"),
-        ("navet",          "unit", "kg"),
-        ("laitue",         "unit", "kg"),
-        ("salade",         "unit", "kg"),
-        # ── Units: sold per piece ──
-        ("ananas",         "unit", "piece"),
-        ("noix de coco",   "unit", "piece"),
-        ("pamplemousse",   "unit", "piece"),
-        # ── Categories: spices/ground powders ──
-        ("coriandre moulue",  "category", "Épices"),
-        ("coriadre moulue",   "category", "Épices"),
-        ("cumin moulu",       "category", "Épices"),
-        ("ras el hanout",     "category", "Épices"),
-        ("tkhlita",           "category", "Épices"),
-        ("poivre",            "category", "Épices"),
-        ("gingembre moulu",   "category", "Épices"),
-        ("paprika",           "category", "Épices"),
-        ("cannelle",          "category", "Épices"),
-        ("safran",            "category", "Épices"),
-    ]
 
     changed: list[dict[str, Any]] = []
     skipped: int = 0
@@ -370,7 +393,9 @@ async def _run_corrections() -> dict[str, Any]:
         oid = doc["_id"]
         updates: dict[str, Any] = {}
 
-        for fragment, field, value in RULES:
+        for fragment, field, value in CORRECTION_RULES:
+            if field == "unit" and value == "kg" and _is_liquid_product(name_fr):
+                continue  # e.g. "Panaché Melon 1L" must not become unit=kg
             if fragment.lower() in name_fr:
                 if doc.get(field) != value:
                     updates[field] = value
@@ -383,6 +408,45 @@ async def _run_corrections() -> dict[str, Any]:
             skipped += 1
 
     return {"ok": True, "changed": len(changed), "skipped": skipped, "details": changed}
+
+
+async def _run_corrections_audit() -> None:
+    """
+    Audit-only version of _run_corrections, called at startup.
+    Logs what WOULD change without applying it. L99: no automatic product
+    modifications -- an admin must review and trigger
+    POST /api/v1/products/corrections explicitly to apply anything.
+    """
+    col = products_col()
+    all_docs = await col.find({}, {"_id": 1, "name_fr": 1, "unit": 1, "category": 1}).to_list(length=500)
+
+    proposed_changes: list[dict[str, Any]] = []
+
+    for doc in all_docs:
+        name_fr = (doc.get("name_fr") or "").lower().strip()
+        if not name_fr:
+            continue
+
+        for fragment, field, value in CORRECTION_RULES:
+            if field == "unit" and value == "kg" and _is_liquid_product(name_fr):
+                continue
+            if fragment.lower() in name_fr and doc.get(field) != value:
+                proposed_changes.append({
+                    "name": doc.get("name_fr"),
+                    "field": field,
+                    "current": doc.get(field),
+                    "proposed": value,
+                })
+
+    if proposed_changes:
+        lines = "\n".join(f"  {c['name']}: {c['field']} {c['current']} -> {c['proposed']}" for c in proposed_changes)
+        logger.warning(
+            "_run_corrections AUDIT: %d product(s) would be modified if auto-correction were active. "
+            "L99 active -- no changes applied. Review manually:\n%s",
+            len(proposed_changes), lines,
+        )
+    else:
+        logger.info("_run_corrections AUDIT: no corrections needed.")
 
 
 @router.post("/corrections", summary="Apply catalog corrections (admin, idempotent)")

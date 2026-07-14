@@ -484,13 +484,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     print(f"STARTUP: Catalog items loaded -> {len(_CATALOG)}")
     await connect_db()
 
-    # Auto-apply product unit/category corrections — idempotent, safe to run every boot
+    # L99: no automatic product modifications on startup. Audit-only -- logs what
+    # would change without writing anything. Admin applies corrections explicitly
+    # via POST /api/v1/products/corrections if they want them.
     try:
-        from app.routes.products import _run_corrections
-        _corr = await _run_corrections()
-        print(f"STARTUP: Product corrections — {_corr['changed']} changed, {_corr['skipped']} unchanged")
+        from app.routes.products import _run_corrections_audit
+        await _run_corrections_audit()
+        print("STARTUP: Product corrections audit complete — see logs above for any proposed changes.")
     except Exception as _exc:
-        print(f"STARTUP WARNING: Product corrections skipped — {_exc}")
+        print(f"STARTUP WARNING: Product corrections audit skipped — {_exc}")
 
     async def _mongo_keepalive() -> None:
         while True:
