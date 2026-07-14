@@ -26,9 +26,12 @@ VARIANT_CATEGORIES = {"Fromage", "Olives", "Volailles"}
 # ── Catalog correction rules (name fragment → field → value) ─────────────────
 CORRECTION_RULES: list[tuple[str, str, Any]] = [
     # ── Units: sold by kg ──
-    ("melon",          "unit", "kg"),
-    ("pastèque",       "unit", "kg"),
-    ("pasteque",       "unit", "kg"),
+    # "melon"/"pastèque"/"pasteque" rules removed 2026-07-14 -- admin has set
+    # these products (Melon, Melon jaune, Melon ananas, Pastèque) to
+    # unit=piece explicitly; the rule was overriding that intent, and its
+    # fragment match also caught "Panaché Melon 1L/250ml/500ml" (a bottled
+    # juice, not the fruit). Admin is the source of truth for unit -- this
+    # rule was wrong, not the data.
     ("potiron",        "unit", "kg"),
     ("betterave",      "unit", "kg"),
     ("patate douce",   "unit", "kg"),
