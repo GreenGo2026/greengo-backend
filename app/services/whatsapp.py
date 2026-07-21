@@ -130,6 +130,9 @@ def notify_customer_order(
         qty  = it.get("quantity", 0)
         unit = it.get("unit", "kg")
         name = it.get("name", "")
+        variant = it.get("variant_label")
+        if variant:
+            name = f"{name} ({variant})"
         price_per = it.get("price_per_unit", 0.0)
         line = it.get("line_total") or round(qty * price_per, 2)
         lines.append(f"   ▪ {name} × {qty} {unit} — {line:.2f} MAD")
@@ -195,6 +198,9 @@ def notify_admin_new_order(
         qty   = it.get("quantity", 0)
         unit  = it.get("unit", "")
         name  = it.get("name", "")
+        variant = it.get("variant_label")
+        if variant:
+            name = f"{name} ({variant})"
         ppu   = it.get("price_per_unit", 0.0)
         total_line = it.get("line_total") or round(qty * ppu, 2)
         product_lines.append(f"   ▪ {name} × {qty} {unit} — {total_line:.2f} MAD")

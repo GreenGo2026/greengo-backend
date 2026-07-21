@@ -40,6 +40,7 @@ class OrderItem(BaseModel):
     quantity: float
     unit: str = "kg"
     price_per_unit: float
+    variant_label: str | None = None
 
 class CreateOrderPayload(BaseModel):
     model_config = {"populate_by_name": True}
@@ -77,7 +78,11 @@ def _calculate_points(total_price: float) -> int:
     """10 MAD = 1 Point. Truncated (no rounding up)."""
     return int(total_price // 10)
 
-async def _server_product_info(name: str, client_fallback_price: float) -> dict[str, Any]:
+async def _server_product_info(
+    name: str,
+    client_fallback_price: float,
+    variant_label: str | None = None,
+) -> dict[str, Any]:
     """
     Look up authoritative price + image_url from MongoDB.
     Prevents price manipulation: client cannot lower prices by sending a fake price_per_unit.
@@ -88,15 +93,27 @@ async def _server_product_info(name: str, client_fallback_price: float) -> dict[
     name), a tampered request could submit any price for the whole pack. So an
     unmatched name is checked against paniers.title next, before ever trusting
     the client-supplied price.
+
+    variant_label, when set, selects the admin-set price for that weight-tier
+    (250g/500g/1kg) from the product's variants[] -- otherwise every variant
+    would silently be billed at the base product's price_mad instead of the
+    price the admin actually set for that pack (L99).
     """
     col = products_col()
     doc = await col.find_one(
         {"$or": [{"name_fr": name}, {"name_ar": name}]},
-        {"price_mad": 1, "image_url": 1},
+        {"price_mad": 1, "image_url": 1, "variants": 1},
     )
     if doc:
+        price = None
+        if variant_label and doc.get("variants"):
+            variant = next((v for v in doc["variants"] if v.get("label") == variant_label), None)
+            if variant and variant.get("price_mad"):
+                price = float(variant["price_mad"])
+        if price is None:
+            price = float(doc["price_mad"]) if doc.get("price_mad") else client_fallback_price
         return {
-            "price":     float(doc["price_mad"]) if doc.get("price_mad") else client_fallback_price,
+            "price":     price,
             "image_url": doc.get("image_url") or "",
         }
 
@@ -121,11 +138,12 @@ async def create_order(payload: CreateOrderPayload, background_tasks: Background
     # ── 1. Resolve authoritative prices + image URLs from DB ─────────────────
     validated_items: list[dict[str, Any]] = []
     for item in payload.items:
-        info = await _server_product_info(item.name, item.price_per_unit)
+        info = await _server_product_info(item.name, item.price_per_unit, item.variant_label)
         validated_items.append({
             "name":           item.name,
             "quantity":       item.quantity,
             "unit":           item.unit,
+            "variant_label":  item.variant_label,
             "price_per_unit": info["price"],
             "line_total":     round(item.quantity * info["price"], 2),
             "image_url":      info["image_url"],
