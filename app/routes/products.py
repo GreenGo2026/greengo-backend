@@ -20,8 +20,10 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/products", tags=["Products v2"])
 
-# ── Auto weight-variant generation for Fromage/Olives/Volailles ──────────────
-VARIANT_CATEGORIES = {"Fromage", "Olives", "Volailles"}
+# ── Auto weight-variant generation for Fromage/Olives/Volailles/Viande Rouge ──
+VARIANT_CATEGORIES = {
+    "Fromage", "Olives", "Volailles", "Viande Rouge"
+}
 
 # ── Catalog correction rules (name fragment → field → value) ─────────────────
 CORRECTION_RULES: list[tuple[str, str, Any]] = [
