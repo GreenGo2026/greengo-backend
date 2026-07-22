@@ -106,6 +106,7 @@ def customers_col()       -> AsyncIOMotorCollection: return _col("customers")
 def paniers_col()         -> AsyncIOMotorCollection: return _col("paniers")
 def reviews_col()         -> AsyncIOMotorCollection: return _col("reviews")
 def newsletter_col()      -> AsyncIOMotorCollection: return _col("newsletter")
+def audit_log_col()       -> AsyncIOMotorCollection: return _col("audit_log")
 
 
 # ---------------------------------------------------------------------------
@@ -142,6 +143,16 @@ async def _init_indexes() -> None:
 
         await newsletter_col().create_indexes([
             IndexModel([("email", ASCENDING)], unique=True, name="uq_newsletter_email"),
+        ])
+
+        await audit_log_col().create_indexes([
+            IndexModel(
+                [("entity_type", ASCENDING), ("entity_id", ASCENDING), ("timestamp", DESCENDING)],
+                name="idx_entity_timestamp",
+            ),
+            # 90-day retention -- MongoDB's TTL monitor deletes documents whose
+            # "timestamp" is older than this, no manual cleanup job needed.
+            IndexModel([("timestamp", ASCENDING)], expireAfterSeconds=7_776_000, name="ttl_90d"),
         ])
 
         logger.info("âœ… [DB] All indexes verified / created.")

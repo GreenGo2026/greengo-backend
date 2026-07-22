@@ -6,11 +6,12 @@ import unicodedata
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from app.auth import require_admin
 from app.database import paniers_col, products_col
+from app.services.audit import PANIER_TRACKED_FIELDS, _compute_diff, actor_id, log_change, request_ip
 
 router = APIRouter(prefix="/api/v1/paniers", tags=["Paniers"])
 
@@ -128,9 +129,11 @@ async def list_paniers() -> list[dict[str, Any]]:
 async def update_panier(
     panier_id: str,
     payload: BasketUpdate,
+    request: Request,
     _: None = Depends(require_admin),
 ) -> dict[str, Any]:
     col = paniers_col()
+    old_doc = await col.find_one({"id": panier_id}) or {}
     result = await col.update_one(
         {"id": panier_id},
         {
@@ -143,6 +146,18 @@ async def update_panier(
     )
     if result.matched_count == 0 and result.upserted_id is None:
         raise HTTPException(status_code=404, detail=f"Panier '{panier_id}' not found.")
+
+    changes = _compute_diff(old_doc, payload.model_dump(), PANIER_TRACKED_FIELDS)
+    await log_change(
+        entity_type="panier",
+        entity_id=panier_id,
+        action="create" if result.upserted_id is not None else "update",
+        changes=changes,
+        admin_id=actor_id(request),
+        ip=request_ip(request),
+        endpoint=f"/api/v1/paniers/{panier_id}",
+    )
+
     return {"ok": True, "id": panier_id}
 
 

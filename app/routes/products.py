@@ -10,11 +10,12 @@ from typing import Any, Optional
 
 from bson import ObjectId
 from bson.errors import InvalidId
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from app.auth import require_admin
 from app.database import products_col
 from app.models.product import CreateProductRequest, ProductResponse, UpdateProductRequest
+from app.services.audit import PRODUCT_TRACKED_FIELDS, _compute_diff, actor_id, log_change, request_ip
 
 logger = logging.getLogger(__name__)
 
@@ -264,6 +265,7 @@ async def delete_product(
 async def update_product(
     product_id: str,
     payload:    UpdateProductRequest,
+    request:    Request,
     _: None = Depends(require_admin),
 ) -> ProductResponse:
     """
@@ -271,7 +273,7 @@ async def update_product(
     Always writes the canonical field name to normalise the document.
     """
     try:
-        return await _do_update(product_id, payload)
+        return await _do_update(product_id, payload, request)
     except HTTPException:
         raise
     except Exception:
@@ -279,7 +281,7 @@ async def update_product(
         raise HTTPException(status_code=500, detail="Unexpected server error -- check Railway logs")
 
 
-async def _do_update(product_id: str, payload: UpdateProductRequest) -> ProductResponse:
+async def _do_update(product_id: str, payload: UpdateProductRequest, request: Request) -> ProductResponse:
     try:
         oid = ObjectId(product_id)
     except InvalidId:
@@ -361,6 +363,18 @@ async def _do_update(product_id: str, payload: UpdateProductRequest) -> ProductR
         raise HTTPException(status_code=500, detail=f"find_one failed: {type(exc).__name__}: {exc}")
     if doc is None:
         raise HTTPException(status_code=404, detail="Product disappeared after update.")
+
+    changes = _compute_diff(existing, doc, PRODUCT_TRACKED_FIELDS)
+    await log_change(
+        entity_type="product",
+        entity_id=product_id,
+        action="update",
+        changes=changes,
+        admin_id=actor_id(request),
+        ip=request_ip(request),
+        endpoint=f"/api/v1/products/{product_id}",
+    )
+
     try:
         return _serialize(doc)
     except Exception as exc:

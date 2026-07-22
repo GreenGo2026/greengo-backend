@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from bson import ObjectId
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from pydantic import BaseModel, Field, AliasChoices
 
 import io
@@ -14,6 +14,7 @@ from app.auth import require_admin
 from app.services.pdf_generator import generate_invoice_pdf
 from app.database import orders_col, customers_col, products_col, paniers_col
 from app.services.whatsapp import notify_customer_order, notify_admin_new_order, send_whatsapp_message
+from app.services.audit import ORDER_TRACKED_FIELDS, _compute_diff, actor_id, log_change, request_ip
 
 router = APIRouter(prefix="/api/v1/orders", tags=["Orders"])
 
@@ -352,6 +353,7 @@ async def update_order_status(
     order_id: str,
     status: str,
     background_tasks: BackgroundTasks,
+    request: Request,
     _: None = Depends(require_admin),
 ) -> dict[str, Any]:
     # Normalize: accept "out_for_delivery", "Out for Delivery", etc.
@@ -380,6 +382,17 @@ async def update_order_status(
     await col.update_one(
         {"_id": ObjectId(order_id)},
         {"$set": {"status": final_status, "updated_at": datetime.now(tz=timezone.utc)}},
+    )
+
+    changes = _compute_diff(order, {**order, "status": final_status}, ORDER_TRACKED_FIELDS)
+    await log_change(
+        entity_type="order",
+        entity_id=order_id,
+        action="update",
+        changes=changes,
+        admin_id=actor_id(request),
+        ip=request_ip(request),
+        endpoint=f"/api/v1/orders/{order_id}/status",
     )
 
     customer_phone = order.get("phone")
