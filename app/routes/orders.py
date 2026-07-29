@@ -36,7 +36,8 @@ DEFAULT_DELIVERY_ZONE = "sale"
 # this brings the same transition enforcement server-side for orders_col(),
 # which previously accepted any status string with no validation at all.
 STATUS_TRANSITIONS: dict[str, list[str]] = {
-    "Pending":          ["Preparing", "Cancelled"],
+    "Pending":          ["Confirmed", "Cancelled"],
+    "Confirmed":        ["Preparing", "Cancelled"],
     "Preparing":        ["Out for Delivery", "Cancelled"],
     "Out for Delivery": ["Delivered", "Cancelled"],
     "Delivered":        ["Completed"],
@@ -375,6 +376,7 @@ async def update_order_status(
     # Normalize: accept "out_for_delivery", "Out for Delivery", etc.
     status_map = {
         "pending":          "Pending",
+        "confirmed":        "Confirmed",
         "preparing":        "Preparing",
         "out_for_delivery": "Out for Delivery",
         "out for delivery": "Out for Delivery",
@@ -428,29 +430,46 @@ async def update_order_status(
         },
     )
 
-    # Auto-restock on cancellation -- base product stock_qty only. Variants
-    # (250g/500g/1kg) have no stock_qty field anywhere in the schema (see
-    # ProductVariant in services/api.ts), so there is nothing to restock at
-    # that level; a cancelled variant line is silently skipped rather than
-    # writing a bogus field onto the variant subdocument.
+    # Auto-restock on cancellation. Variant lines (250g/500g/1kg) restock the
+    # matching variants[].stock_qty; MongoDB's $inc creates the field at the
+    # matched array position if it was never set, so no separate "init" step
+    # is needed. Lines with no variant_label (or whose variant carries no
+    # stock_qty) fall back to the base product's stock_qty. Either path is
+    # skipped if there's no stock_qty to restock -- both fields are purely
+    # informational (they don't gate in_stock/purchasability).
     restocked: list[str] = []
     if final_status == "Cancelled" and current_status != "Cancelled":
         for item in order.get("items", []):
-            p_name = item.get("name", "")
-            qty    = item.get("quantity", 0)
+            p_name  = item.get("name", "")
+            v_label = item.get("variant_label")
+            qty     = item.get("quantity", 0)
             if not p_name or not qty:
                 continue
+
             product = await products_col().find_one(
                 {"$or": [{"name_fr": p_name}, {"name_ar": p_name}]},
-                {"_id": 1, "stock_qty": 1},
+                {"_id": 1, "stock_qty": 1, "variants": 1},
             )
-            if not product or product.get("stock_qty") is None:
+            if not product:
                 continue
-            await products_col().update_one(
-                {"_id": product["_id"]},
-                {"$inc": {"stock_qty": qty}},
-            )
-            restocked.append(f"{p_name} +{qty}")
+
+            if v_label and product.get("variants"):
+                variant = next((v for v in product["variants"] if v.get("label") == v_label), None)
+                if variant is not None:
+                    result = await products_col().update_one(
+                        {"_id": product["_id"], "variants.label": v_label},
+                        {"$inc": {"variants.$.stock_qty": qty}},
+                    )
+                    if result.modified_count > 0:
+                        restocked.append(f"{p_name} ({v_label}) +{qty}")
+                    continue
+
+            if product.get("stock_qty") is not None:
+                await products_col().update_one(
+                    {"_id": product["_id"]},
+                    {"$inc": {"stock_qty": qty}},
+                )
+                restocked.append(f"{p_name} +{qty}")
 
     changes = _compute_diff(order, {**order, "status": final_status}, ORDER_TRACKED_FIELDS)
     await log_change(
@@ -470,6 +489,10 @@ async def update_order_status(
     wa_sent = False
     if payload.notify_customer and customer_phone:
         status_messages = {
+            "Confirmed": (
+                f"✅ مرحباً {customer_name}، طلبيتك مؤكدة! كنحضروها دابا. 📦\n"
+                f"Commande confirmée — #{short_id}"
+            ),
             "Preparing": (
                 f"🔵 مرحباً {customer_name}، بدأنا في تحضير طلبك الآن! 📦\n"
                 f"En préparation — commande #{short_id}"

@@ -12,6 +12,7 @@ class ProductVariant(BaseModel):
     weight_g:  Optional[int] = None
     sku:       Optional[str] = None
     in_stock:  bool = True
+    stock_qty: Optional[int] = None  # per-variant stock count, same semantics as ProductResponse.stock_qty (informational -- does not gate in_stock)
 
 
 class ProductResponse(BaseModel):
