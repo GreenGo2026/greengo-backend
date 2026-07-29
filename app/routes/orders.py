@@ -30,6 +30,20 @@ DELIVERY_FEES: dict[str, float] = {
 }
 DEFAULT_DELIVERY_ZONE = "sale"
 
+# ── Status machine ────────────────────────────────────────────────────────────
+# Mirrors OrderStatus.allowed_next in app/models/order.py (legacy whatsapp_orders
+# path) and NEXT_STATES in src/pages/AdminPage.tsx (frontend button gating) --
+# this brings the same transition enforcement server-side for orders_col(),
+# which previously accepted any status string with no validation at all.
+STATUS_TRANSITIONS: dict[str, list[str]] = {
+    "Pending":          ["Preparing", "Cancelled"],
+    "Preparing":        ["Out for Delivery", "Cancelled"],
+    "Out for Delivery": ["Delivered", "Cancelled"],
+    "Delivered":        ["Completed"],
+    "Completed":        [],
+    "Cancelled":        [],
+}
+
 # ── Pydantic models ───────────────────────────────────────────────────────────
 
 class GPSCoordinates(BaseModel):
@@ -67,8 +81,10 @@ class AssignDriverPayload(BaseModel):
     driver_name: str
     driver_phone: str
 
-class UpdateStatusPayload(BaseModel):
+class OrderStatusUpdate(BaseModel):
     status: str
+    note: str | None = None
+    notify_customer: bool = True
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -351,7 +367,7 @@ async def track_order_public(order_ref: str | None = None, phone: str | None = N
 @router.patch("/{order_id}/status", summary="Update order status")
 async def update_order_status(
     order_id: str,
-    status: str,
+    payload: OrderStatusUpdate,
     background_tasks: BackgroundTasks,
     request: Request,
     _: None = Depends(require_admin),
@@ -367,11 +383,11 @@ async def update_order_status(
         "canceled":         "Cancelled",
         "completed":        "Completed",
     }
-    final_status = status_map.get(status.lower().strip())
+    final_status = status_map.get(payload.status.lower().strip())
     if not final_status:
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid status: {status}. Must be one of: {list(status_map.keys())}",
+            detail=f"Invalid status: {payload.status}. Must be one of: {list(status_map.keys())}",
         )
 
     col   = orders_col()
@@ -379,10 +395,62 @@ async def update_order_status(
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
 
+    current_status = order.get("status", "Pending")
+
+    # Enforce the same transition rules already used by the legacy
+    # whatsapp_orders lifecycle (OrderStatus.allowed_next) and the admin UI
+    # (NEXT_STATES in AdminPage.tsx) -- previously this endpoint accepted any
+    # status string with no validation.
+    allowed = STATUS_TRANSITIONS.get(current_status, [])
+    if final_status not in allowed and final_status != current_status:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Invalid transition: '{current_status}' -> '{final_status}'. "
+                f"Allowed: {allowed or ['none (terminal)']}"
+            ),
+        )
+
+    now = datetime.now(tz=timezone.utc)
+    history_entry = {
+        "from":       current_status,
+        "to":         final_status,
+        "timestamp":  now,
+        "changed_by": actor_id(request),
+        "note":       payload.note or "",
+    }
+
     await col.update_one(
         {"_id": ObjectId(order_id)},
-        {"$set": {"status": final_status, "updated_at": datetime.now(tz=timezone.utc)}},
+        {
+            "$set":  {"status": final_status, "updated_at": now},
+            "$push": {"status_history": history_entry},
+        },
     )
+
+    # Auto-restock on cancellation -- base product stock_qty only. Variants
+    # (250g/500g/1kg) have no stock_qty field anywhere in the schema (see
+    # ProductVariant in services/api.ts), so there is nothing to restock at
+    # that level; a cancelled variant line is silently skipped rather than
+    # writing a bogus field onto the variant subdocument.
+    restocked: list[str] = []
+    if final_status == "Cancelled" and current_status != "Cancelled":
+        for item in order.get("items", []):
+            p_name = item.get("name", "")
+            qty    = item.get("quantity", 0)
+            if not p_name or not qty:
+                continue
+            product = await products_col().find_one(
+                {"$or": [{"name_fr": p_name}, {"name_ar": p_name}]},
+                {"_id": 1, "stock_qty": 1},
+            )
+            if not product or product.get("stock_qty") is None:
+                continue
+            await products_col().update_one(
+                {"_id": product["_id"]},
+                {"$inc": {"stock_qty": qty}},
+            )
+            restocked.append(f"{p_name} +{qty}")
 
     changes = _compute_diff(order, {**order, "status": final_status}, ORDER_TRACKED_FIELDS)
     await log_change(
@@ -399,7 +467,8 @@ async def update_order_status(
     customer_name  = order.get("customer_name", "عزيزنا الزبون")
     short_id       = order_id[-6:].upper()
 
-    if customer_phone:
+    wa_sent = False
+    if payload.notify_customer and customer_phone:
         status_messages = {
             "Preparing": (
                 f"🔵 مرحباً {customer_name}، بدأنا في تحضير طلبك الآن! 📦\n"
@@ -427,8 +496,16 @@ async def update_order_status(
         msg = status_messages.get(final_status)
         if msg:
             background_tasks.add_task(send_whatsapp_message, customer_phone, msg)
+            wa_sent = True
 
-    return {"order_id": order_id, "status": final_status, "updated": True}
+    return {
+        "order_id":        order_id,
+        "previous_status": current_status,
+        "new_status":       final_status,
+        "restocked":        restocked,
+        "whatsapp_sent":    wa_sent,
+        "note":             payload.note,
+    }
 
 
 
