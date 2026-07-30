@@ -145,6 +145,15 @@ async def _init_indexes() -> None:
             IndexModel([("email", ASCENDING)], unique=True, name="uq_newsletter_email"),
         ])
 
+        await customers_col().create_indexes([
+            # The loyalty upsert in create_order() already matches/dedupes by
+            # exact phone string, so this index cannot fail against existing
+            # data -- it just makes that guarantee explicit.
+            IndexModel([("phone", ASCENDING)], unique=True, name="uq_customer_phone"),
+            IndexModel([("segment", ASCENDING)], name="idx_customer_segment"),
+            IndexModel([("total_spent", DESCENDING)], name="idx_customer_total_spent"),
+        ])
+
         await audit_log_col().create_indexes([
             IndexModel(
                 [("entity_type", ASCENDING), ("entity_id", ASCENDING), ("timestamp", DESCENDING)],

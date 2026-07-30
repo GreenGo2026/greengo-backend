@@ -216,11 +216,22 @@ async def create_order(payload: CreateOrderPayload, background_tasks: Background
                     "name":        payload.customer_name.strip(),
                     "created_at":  now,
                 },
-                "$inc":  {"total_points": net_points_delta},
+                "$inc":  {
+                    "total_points": net_points_delta,
+                    # CRM summary fields (Module 4) -- kept on the same
+                    # customer doc the loyalty system already maintains,
+                    # rather than a second collection/upsert competing for
+                    # the same phone key.
+                    "total_orders": 1,
+                    "total_spent":  final_total,
+                },
                 "$set":  {
                     "last_order_id": order_id,
                     "updated_at":    now,
+                    "zone":          zone,
                 },
+                "$min": {"first_order": now},
+                "$max": {"last_order":  now},
                 "$push": {
                     "orders": {
                         "order_id":      order_id,
@@ -235,6 +246,12 @@ async def create_order(payload: CreateOrderPayload, background_tasks: Background
             return_document=True,  # returns the document AFTER the update
         )
         total_points = update_result.get("total_points", earned_points) if update_result else earned_points
+
+        # Segment recompute -- needs the post-increment total_orders, so it's
+        # a second, cheap update rather than part of the atomic upsert above.
+        orders_count = update_result.get("total_orders", 1) if update_result else 1
+        segment = "vip" if orders_count >= 10 else "regular" if orders_count >= 3 else "new"
+        await cust_col.update_one({"phone": phone_key}, {"$set": {"segment": segment}})
     except Exception as exc:
         # Loyalty failure must NOT block the order confirmation
         total_points = earned_points
