@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from app.auth import require_admin
-from app.database import customers_col, orders_col
+from app.database import customers_col
 
 router  = APIRouter(prefix="/api/v1/customers", tags=["Customers"])
 limiter = Limiter(key_func=get_remote_address)
@@ -173,53 +173,3 @@ async def add_customer_note(
     }
     await col.update_one({"_id": doc["_id"]}, {"$push": {"notes": note_entry}})
     return {"status": "note added"}
-
-
-@router.post("/purge-invalid-phones", summary="ONE-TIME cleanup — DELETE AFTER USE")
-async def purge_invalid_phone_customers(dry_run: bool = Query(True), _: None = Depends(require_admin)) -> dict:
-    """
-    Removes customer documents whose phone is not a plausible phone number
-    (contains anything other than digits and a leading +) -- e.g. test/spam
-    submissions like "+21200000000{1..3}" (unresolved bash brace expansion).
-    A real Moroccan phone only ever contains digits and an optional leading
-    '+', so this can't false-positive on a genuine customer the way a
-    spend/order-count threshold could (a real customer's one big order would
-    otherwise look identical to "spam" under a total_spent>=9000 heuristic).
-
-    dry_run=true (default) only lists candidates, never deletes.
-    """
-    col = customers_col()
-    invalid_filter = {"phone": {"$not": {"$regex": r"^\+?[0-9]+$"}}}
-
-    candidates = []
-    async for c in col.find(invalid_filter, {"phone": 1, "name": 1, "total_spent": 1, "total_orders": 1}):
-        candidates.append({
-            "id":           str(c["_id"]),
-            "phone":        c.get("phone"),
-            "name":         c.get("name"),
-            "total_spent":  c.get("total_spent"),
-            "total_orders": c.get("total_orders"),
-        })
-
-    # Report-only -- matching orders are never deleted here, an admin
-    # decides separately whether those are worth removing.
-    spam_orders = await orders_col().count_documents(invalid_filter)
-
-    if dry_run:
-        return {
-            "dry_run":      True,
-            "candidates":   candidates,
-            "would_delete": len(candidates),
-            "spam_orders_found_not_deleted": spam_orders,
-        }
-
-    result = await col.delete_many(invalid_filter)
-    remaining = await col.count_documents({})
-    return {
-        "dry_run":         False,
-        "deleted":         result.deleted_count,
-        "deleted_records": candidates,
-        "customers_after": remaining,
-        "spam_orders_found_not_deleted": spam_orders,
-        "action_required": "DELETE this endpoint after verifying results",
-    }
