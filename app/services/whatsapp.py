@@ -118,7 +118,7 @@ def notify_customer_order(
     address: str,
     earned_points: int,
     total_points: int,
-) -> None:
+) -> bool:
     """
     Rich order confirmation to the customer.
     Includes product list, subtotal, delivery fee, total, address, and loyalty points.
@@ -159,7 +159,7 @@ def notify_customer_order(
         f"   (كل 10 درهم = نقطة واحدة)\n\n"
         f"سنتواصل معك قريباً للتوصيل. بالصحة والراحة! 🌿"
     )
-    send_whatsapp_message(phone, msg)
+    return send_whatsapp_message(phone, msg)
 
 
 def notify_admin_new_order(
@@ -174,7 +174,7 @@ def notify_admin_new_order(
     delivery_zone: str,
     delivery_fee: float,
     total: float,
-) -> None:
+) -> bool:
     """
     Send new-order alert to the admin WhatsApp number.
     Sends a text summary first, then one image per product (max 6) with price caption.
@@ -182,7 +182,7 @@ def notify_admin_new_order(
     admin_phone = _ADMIN_PHONE
     if not admin_phone:
         logger.warning("[WA] ADMIN_WHATSAPP_PHONE not set — skipping admin notification.")
-        return
+        return False
 
     short_id  = order_id[-6:].upper()
     now_str   = datetime.now(tz=timezone.utc).strftime("%H:%M | %d/%m/%Y")
@@ -227,4 +227,4 @@ def notify_admin_new_order(
         f"🔢 Commande: #{short_id}\n"
         f"🕐 {now_str}"
     )
-    send_whatsapp_message(admin_phone, text)
+    return send_whatsapp_message(admin_phone, text)

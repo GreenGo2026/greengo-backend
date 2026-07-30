@@ -15,6 +15,7 @@ from passlib.context import CryptContext
 from pydantic import BaseModel
 
 from app.auth import check_login_rate_limit, record_failed_login, require_admin
+from app.services.session_logger import log_admin_session
 
 logger = logging.getLogger(__name__)
 
@@ -108,11 +109,27 @@ async def admin_login(body: LoginRequest, request: Request, response: Response) 
 
     # Return the same error whether password or TOTP failed (no oracle)
     if not pw_ok or not totp_ok:
+        try:
+            await log_admin_session(
+                event="failed_attempt",
+                ip=ip,
+                user_agent=request.headers.get("user-agent", ""),
+                details="Login: invalid password or TOTP",
+            )
+        except Exception:
+            pass
         record_failed_login(ip)  # may raise 429 if hard-block threshold hit
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Identifiants invalides.",
         )
+
+    try:
+        await log_admin_session(
+            event="login", ip=ip, user_agent=request.headers.get("user-agent", ""), details="2FA login success",
+        )
+    except Exception:
+        pass
 
     token = issue_admin_jwt()
     # SameSite=None + Secure required for cross-origin (Vercel ↔ Railway)
@@ -129,8 +146,13 @@ async def admin_login(body: LoginRequest, request: Request, response: Response) 
 
 
 @router.post("/logout", summary="Clear admin session cookie")
-async def admin_logout(response: Response) -> dict:
+async def admin_logout(request: Request, response: Response) -> dict:
     response.delete_cookie(key=_COOKIE_NAME, path="/", samesite="none", secure=True)
+    try:
+        ip = request.client.host if request.client else "unknown"
+        await log_admin_session(event="logout", ip=ip, user_agent=request.headers.get("user-agent", ""))
+    except Exception:
+        pass
     return {"ok": True}
 
 

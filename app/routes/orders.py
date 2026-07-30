@@ -13,8 +13,8 @@ from fastapi.responses import StreamingResponse
 from app.auth import require_admin
 from app.services.pdf_generator import generate_invoice_pdf
 from app.database import orders_col, customers_col, products_col, paniers_col
-from app.services.whatsapp import notify_customer_order, notify_admin_new_order, send_whatsapp_message
 from app.services.audit import ORDER_TRACKED_FIELDS, _compute_diff, actor_id, log_change, request_ip
+from app.services.notifications import send_and_log, notify_customer_and_log, notify_admin_and_log
 
 router = APIRouter(prefix="/api/v1/orders", tags=["Orders"])
 
@@ -198,6 +198,7 @@ async def create_order(payload: CreateOrderPayload, background_tasks: Background
     try:
         result   = await col.insert_one(doc)
         order_id = str(result.inserted_id)
+        short_id = order_id[-6:].upper()
     except Exception:
         raise HTTPException(status_code=500, detail="Failed to create order. Please try again.")
 
@@ -259,7 +260,8 @@ async def create_order(payload: CreateOrderPayload, background_tasks: Background
     # ── 4. WhatsApp notifications ─────────────────────────────────────────────
     # 4a. Customer: rich confirmation with product list + loyalty
     background_tasks.add_task(
-        notify_customer_order,
+        notify_customer_and_log,
+        order_id, short_id,
         phone          = payload.phone,
         customer_name  = payload.customer_name,
         order_id       = order_id,
@@ -279,7 +281,8 @@ async def create_order(payload: CreateOrderPayload, background_tasks: Background
         if payload.gps_coordinates else None
     )
     background_tasks.add_task(
-        notify_admin_new_order,
+        notify_admin_and_log,
+        order_id, short_id,
         order_id        = order_id,
         customer_name   = payload.customer_name,
         customer_phone  = payload.phone,
@@ -535,7 +538,7 @@ async def update_order_status(
         }
         msg = status_messages.get(final_status)
         if msg:
-            background_tasks.add_task(send_whatsapp_message, customer_phone, msg)
+            background_tasks.add_task(send_and_log, customer_phone, msg, "order_status", order_id, short_id)
             wa_sent = True
 
     return {

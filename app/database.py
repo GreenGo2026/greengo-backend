@@ -16,7 +16,7 @@ from app.config import get_settings
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Motor client â€” None until connect_db() is awaited at startup
+# Motor client -- None until connect_db() is awaited at startup
 # ---------------------------------------------------------------------------
 
 _client: AsyncIOMotorClient | None = None
@@ -32,7 +32,7 @@ def get_db_client() -> AsyncIOMotorClient:
 
 
 # ---------------------------------------------------------------------------
-# Lifespan helpers â€” called from main.py
+# Lifespan helpers -- called from main.py
 # ---------------------------------------------------------------------------
 
 async def connect_db() -> None:
@@ -49,20 +49,20 @@ async def connect_db() -> None:
 
     settings = get_settings()
     logger.info(
-        "ðŸ”Œ [DB] Connecting to MongoDB â€” URI: %s",
+        "[DB] Connecting to MongoDB -- URI: %s",
         settings.MONGODB_URI[:40],
     )
 
     _client = AsyncIOMotorClient(
         settings.MONGODB_URI,
-        # â”€â”€ Windows SSL fix â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        # -- Windows SSL fix --------------------------------------------------
         # certifi ships a current CA bundle, bypassing the Windows certificate
         # store resolution issue that causes ReplicaSetNoPrimary on Atlas.
         tlsCAFile=certifi.where(),
-        # â”€â”€ Connection pool â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        # -- Connection pool ---------------------------------------------------
         maxPoolSize=10,
         minPoolSize=2,
-        # â”€â”€ Timeouts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        # -- Timeouts ------------------------------------------------------------
         serverSelectionTimeoutMS=8_000,
         connectTimeoutMS=10_000,
         socketTimeoutMS=30_000,
@@ -71,9 +71,9 @@ async def connect_db() -> None:
 
     try:
         await _client.admin.command("ping")
-        logger.info("[DB] Ping successful — connected to %s.", settings.MONGO_DB_NAME)
+        logger.info("[DB] Ping successful -- connected to %s.", settings.MONGO_DB_NAME)
     except Exception as _e:
-        logger.warning("[DB] Ping failed — starting without DB: %s", _e)
+        logger.warning("[DB] Ping failed -- starting without DB: %s", _e)
     await _init_indexes()
 
 
@@ -83,7 +83,7 @@ def close_db() -> None:
     if _client is not None:
         _client.close()
         _client = None
-        logger.info("ðŸ”Œ [DB] Motor client closed.")
+        logger.info("[DB] Motor client closed.")
 
 
 # ---------------------------------------------------------------------------
@@ -107,54 +107,50 @@ def paniers_col()         -> AsyncIOMotorCollection: return _col("paniers")
 def reviews_col()         -> AsyncIOMotorCollection: return _col("reviews")
 def newsletter_col()      -> AsyncIOMotorCollection: return _col("newsletter")
 def audit_log_col()       -> AsyncIOMotorCollection: return _col("audit_log")
+def notifications_col()   -> AsyncIOMotorCollection: return _col("notifications")
+def session_log_col()     -> AsyncIOMotorCollection: return _col("session_log")
 
 
 # ---------------------------------------------------------------------------
-# Index bootstrap â€” idempotent, runs automatically inside connect_db()
+# Index bootstrap -- idempotent, runs automatically inside connect_db()
 # ---------------------------------------------------------------------------
 
 async def _init_indexes() -> None:
-    try:
-        await users_col().create_indexes([
-            IndexModel(
-                [("phone_number", ASCENDING)],
-                unique=True,
-                name="uq_phone",
-            ),
-        ])
-
-        await products_col().create_indexes([
-            IndexModel([("category",         ASCENDING)], name="idx_category"),
-            IndexModel([("is_vacuum_sealed",  ASCENDING)], name="idx_vacuum"),
-            IndexModel([("stock",             ASCENDING)], name="idx_stock"),
-        ])
-
-        await orders_col().create_indexes([
+    # Each collection's indexes are created independently -- an
+    # IndexOptionsConflict (or any other failure) on one collection must not
+    # silently skip every collection listed after it, which is what wrapping
+    # the whole function body in a single try/except previously did.
+    index_groups: list[tuple[str, AsyncIOMotorCollection, list[IndexModel]]] = [
+        ("users", users_col(), [
+            IndexModel([("phone_number", ASCENDING)], unique=True, name="uq_phone"),
+        ]),
+        ("products", products_col(), [
+            IndexModel([("category",        ASCENDING)], name="idx_category"),
+            IndexModel([("is_vacuum_sealed", ASCENDING)], name="idx_vacuum"),
+            IndexModel([("stock",            ASCENDING)], name="idx_stock"),
+        ]),
+        ("orders", orders_col(), [
             IndexModel([("user_id",    ASCENDING)],  name="idx_user"),
             IndexModel([("status",     ASCENDING)],  name="idx_status"),
             IndexModel([("created_at", DESCENDING)], name="idx_created_desc"),
-        ])
-
-        await whatsapp_orders_col().create_indexes([
+        ]),
+        ("whatsapp_orders", whatsapp_orders_col(), [
             IndexModel([("customer_phone", ASCENDING)],  name="idx_wa_phone"),
             IndexModel([("status",         ASCENDING)],  name="idx_wa_status"),
             IndexModel([("created_at",     DESCENDING)], name="idx_wa_created_desc"),
-        ])
-
-        await newsletter_col().create_indexes([
+        ]),
+        ("newsletter", newsletter_col(), [
             IndexModel([("email", ASCENDING)], unique=True, name="uq_newsletter_email"),
-        ])
-
-        await customers_col().create_indexes([
+        ]),
+        ("customers", customers_col(), [
             # The loyalty upsert in create_order() already matches/dedupes by
             # exact phone string, so this index cannot fail against existing
             # data -- it just makes that guarantee explicit.
             IndexModel([("phone", ASCENDING)], unique=True, name="uq_customer_phone"),
             IndexModel([("segment", ASCENDING)], name="idx_customer_segment"),
             IndexModel([("total_spent", DESCENDING)], name="idx_customer_total_spent"),
-        ])
-
-        await audit_log_col().create_indexes([
+        ]),
+        ("audit_log", audit_log_col(), [
             IndexModel(
                 [("entity_type", ASCENDING), ("entity_id", ASCENDING), ("timestamp", DESCENDING)],
                 name="idx_entity_timestamp",
@@ -162,10 +158,23 @@ async def _init_indexes() -> None:
             # 90-day retention -- MongoDB's TTL monitor deletes documents whose
             # "timestamp" is older than this, no manual cleanup job needed.
             IndexModel([("timestamp", ASCENDING)], expireAfterSeconds=7_776_000, name="ttl_90d"),
-        ])
+        ]),
+        ("notifications", notifications_col(), [
+            IndexModel([("status", ASCENDING), ("created_at", DESCENDING)], name="status_created_idx"),
+            # 30-day retention.
+            IndexModel([("created_at", ASCENDING)], expireAfterSeconds=2_592_000, name="ttl_30d_notifications"),
+        ]),
+        ("session_log", session_log_col(), [
+            IndexModel([("event", ASCENDING), ("timestamp", DESCENDING)], name="event_timestamp_idx"),
+            # 90-day retention.
+            IndexModel([("timestamp", ASCENDING)], expireAfterSeconds=7_776_000, name="ttl_90d_sessions"),
+        ]),
+    ]
 
-        logger.info("âœ… [DB] All indexes verified / created.")
+    for name, col, models in index_groups:
+        try:
+            await col.create_indexes(models)
+        except Exception as exc:
+            logger.error("[DB] Index bootstrap failed for %s: %s", name, exc)
 
-    except Exception as exc:
-        logger.error("âŒ [DB] Index bootstrap failed: %s", exc)
-
+    logger.info("[DB] Index bootstrap complete.")

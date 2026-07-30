@@ -123,6 +123,17 @@ async def require_admin(
     if api_key and secrets.compare_digest(api_key.encode(), expected.encode()):
         return
 
+    try:
+        from app.services.session_logger import log_admin_session
+        await log_admin_session(
+            event="failed_attempt",
+            ip=request.client.host if request.client else "unknown",
+            user_agent=request.headers.get("user-agent", ""),
+            details=f"{request.method} {request.url.path}",
+        )
+    except Exception:
+        pass  # Never block the auth flow
+
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Accès refusé. Token JWT expiré/invalide ou clé admin incorrecte.",

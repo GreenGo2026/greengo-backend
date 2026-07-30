@@ -56,6 +56,8 @@ from app.routes.whatsapp_admin  import router as whatsapp_admin_router
 from app.routes.reviews         import router as reviews_router
 from app.routes.newsletter      import router as newsletter_router
 from app.routes.audit           import router as audit_router
+from app.routes.notifications   import router as notifications_router
+from app.routes.admin_sessions  import router as admin_sessions_router
 
 # ---------------------------------------------------------------------------
 # New models imported directly from their modules (not via __init__)
@@ -639,6 +641,8 @@ app.include_router(customers_router)
 app.include_router(reviews_router)
 app.include_router(newsletter_router)
 app.include_router(audit_router)
+app.include_router(notifications_router)
+app.include_router(admin_sessions_router)
 
 
 # ===========================================================================
