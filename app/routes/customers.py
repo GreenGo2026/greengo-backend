@@ -233,9 +233,20 @@ async def migrate_customers_from_orders(_: None = Depends(require_admin)) -> dic
         )
         updated += 1
 
-    await cust_col.create_index("phone", unique=True, background=True)
-    await cust_col.create_index("segment", background=True)
-    await cust_col.create_index([("total_spent", -1)], background=True)
+    # Index names don't matter here, only that a unique-on-phone index (and
+    # the other two) exist -- create_index() raises IndexOptionsConflict if
+    # one already exists under a different name (e.g. from an earlier manual
+    # setup), which must not fail the whole migration after the data above
+    # already committed successfully.
+    for index_spec, kwargs in [
+        ("phone", {"unique": True, "background": True}),
+        ("segment", {"background": True}),
+        ([("total_spent", -1)], {"background": True}),
+    ]:
+        try:
+            await cust_col.create_index(index_spec, **kwargs)
+        except Exception:
+            pass
 
     total_customers = await cust_col.count_documents({})
 
