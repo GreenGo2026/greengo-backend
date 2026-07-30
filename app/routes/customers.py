@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from app.auth import require_admin
-from app.database import customers_col
+from app.database import customers_col, orders_col
 
 router  = APIRouter(prefix="/api/v1/customers", tags=["Customers"])
 limiter = Limiter(key_func=get_remote_address)
@@ -173,3 +173,76 @@ async def add_customer_note(
     }
     await col.update_one({"_id": doc["_id"]}, {"$push": {"notes": note_entry}})
     return {"status": "note added"}
+
+
+@router.post("/migrate-from-orders", summary="ONE-TIME migration — DELETE AFTER USE")
+async def migrate_customers_from_orders(_: None = Depends(require_admin)) -> dict:
+    """
+    Backfill/recompute customers[].{total_orders,total_spent,zone,segment,
+    first_order,last_order} from orders_col() -- the authoritative source.
+
+    Uses $set with values freshly aggregated on every run (not $inc), which
+    is what makes this genuinely idempotent: create_order() already
+    increments these same fields in real time on every new order, so an
+    $inc-based backfill would double-count every order created since that
+    hook went live. Recomputing the true sum from scratch and overwriting
+    is correct no matter how many times this runs or what the live hook
+    already added.
+    """
+    cust_col = customers_col()
+    ord_col  = orders_col()
+
+    pipeline = [
+        {"$match": {"phone": {"$exists": True, "$ne": ""}}},
+        {"$sort": {"created_at": 1}},
+        {"$group": {
+            "_id":          "$phone",
+            "name":         {"$last": "$customer_name"},
+            "zone":         {"$last": "$delivery_zone"},
+            "total_orders": {"$sum": 1},
+            "total_spent":  {"$sum": {"$toDouble": "$total_price"}},
+            "first_order":  {"$min": "$created_at"},
+            "last_order":   {"$max": "$created_at"},
+        }},
+    ]
+
+    updated = 0
+    seg_counts = {"vip": 0, "regular": 0, "new": 0}
+
+    async for doc in ord_col.aggregate(pipeline):
+        phone = doc["_id"]
+        total_orders = doc["total_orders"]
+        segment = "vip" if total_orders >= 10 else "regular" if total_orders >= 3 else "new"
+        seg_counts[segment] += 1
+
+        await cust_col.update_one(
+            {"phone": phone},
+            {
+                "$set": {
+                    "name":         doc.get("name") or "",
+                    "zone":         doc.get("zone") or "",
+                    "total_orders": total_orders,
+                    "total_spent":  round(doc.get("total_spent", 0.0), 2),
+                    "first_order":  doc.get("first_order"),
+                    "last_order":   doc.get("last_order"),
+                    "segment":      segment,
+                },
+                "$setOnInsert": {"phone": phone, "notes": [], "created_at": doc.get("first_order")},
+            },
+            upsert=True,
+        )
+        updated += 1
+
+    await cust_col.create_index("phone", unique=True, background=True)
+    await cust_col.create_index("segment", background=True)
+    await cust_col.create_index([("total_spent", -1)], background=True)
+
+    total_customers = await cust_col.count_documents({})
+
+    return {
+        "status":            "migration complete",
+        "customers_updated": updated,
+        "total_customers":   total_customers,
+        "segments":          seg_counts,
+        "action_required":   "DELETE this endpoint after verifying results",
+    }
