@@ -33,7 +33,11 @@ async def log_notification(
     try:
         result = await notifications_col().insert_one({
             "recipient_phone":    recipient_phone,
-            "message":            message[:200],
+            # 4000 chars covers WhatsApp's practical message ceiling -- 200
+            # was fine for the order_status summary but truncated full
+            # order_confirm/admin_alert text, which would make a retry send
+            # a cut-off message instead of the real confirmation.
+            "message":            message[:4000],
             "notification_type":  notification_type,
             "order_id":           order_id,
             "order_ref":          order_ref,
@@ -116,35 +120,51 @@ def send_and_log(
 def notify_customer_and_log(_log_order_id: str, _log_order_ref: str, **kwargs: Any) -> None:
     """
     Background-task-safe replacement for notify_customer_order(**kwargs).
-    The leading params are prefixed (_log_*) so they can't collide with the
-    order_id kwarg that must also be forwarded to notify_customer_order().
+    Builds the real message text via build_customer_order_message() first so
+    the FULL confirmation is logged (and therefore retriable), not just a
+    placeholder summary. The leading params are prefixed (_log_*) so they
+    can't collide with the order_id kwarg forwarded to the builder.
     """
-    from app.services.whatsapp import notify_customer_order
-    summary = f"Order confirmation #{_log_order_ref}"
-    _run_and_log(
-        lambda: notify_customer_order(**kwargs),
-        (),
-        kwargs.get("phone", ""),
-        summary,
-        "order_confirm",
-        _log_order_id,
-        _log_order_ref,
+    from app.services.whatsapp import build_customer_order_message, send_whatsapp_message
+    phone = kwargs.get("phone", "")
+    text = build_customer_order_message(
+        customer_name=kwargs.get("customer_name", ""),
+        order_id=kwargs.get("order_id", ""),
+        items=kwargs.get("items", []),
+        subtotal=kwargs.get("subtotal", 0.0),
+        delivery_zone=kwargs.get("delivery_zone", ""),
+        delivery_fee=kwargs.get("delivery_fee", 0.0),
+        total=kwargs.get("total", 0.0),
+        address=kwargs.get("address", ""),
+        earned_points=kwargs.get("earned_points", 0),
+        total_points=kwargs.get("total_points", 0),
     )
+    _run_and_log(send_whatsapp_message, (phone, text), phone, text, "order_confirm", _log_order_id, _log_order_ref)
 
 
 def notify_admin_and_log(_log_order_id: str, _log_order_ref: str, **kwargs: Any) -> None:
-    """Background-task-safe replacement for notify_admin_new_order(**kwargs)."""
-    from app.services.whatsapp import notify_admin_new_order
-    summary = f"Admin alert #{_log_order_ref}"
-    _run_and_log(
-        lambda: notify_admin_new_order(**kwargs),
-        (),
-        os.getenv("ADMIN_WHATSAPP_PHONE", ""),
-        summary,
-        "admin_alert",
-        _log_order_id,
-        _log_order_ref,
+    """
+    Background-task-safe replacement for notify_admin_new_order(**kwargs).
+    Same real-text logging as notify_customer_and_log, via
+    build_admin_order_message().
+    """
+    from app.services.whatsapp import build_admin_order_message, send_whatsapp_message
+    admin_phone = os.getenv("ADMIN_WHATSAPP_PHONE", "")
+    if not admin_phone:
+        return  # matches notify_admin_new_order()'s own early-return behavior
+    text = build_admin_order_message(
+        order_id=kwargs.get("order_id", ""),
+        customer_name=kwargs.get("customer_name", ""),
+        customer_phone=kwargs.get("customer_phone", ""),
+        address=kwargs.get("address", ""),
+        gps=kwargs.get("gps"),
+        items=kwargs.get("items", []),
+        subtotal=kwargs.get("subtotal", 0.0),
+        delivery_zone=kwargs.get("delivery_zone", ""),
+        delivery_fee=kwargs.get("delivery_fee", 0.0),
+        total=kwargs.get("total", 0.0),
     )
+    _run_and_log(send_whatsapp_message, (admin_phone, text), admin_phone, text, "admin_alert", _log_order_id, _log_order_ref)
 
 
 # ── Green-API status check ───────────────────────────────────────────────────

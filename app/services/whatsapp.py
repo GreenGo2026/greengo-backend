@@ -4,8 +4,10 @@ Green-API WhatsApp service.
 Public functions (all sync, never raise):
   send_whatsapp_message(phone, text)          — plain text to any number
   send_file_by_url(phone, url, name, caption) — image/file with caption
-  notify_customer_order(...)                  — rich confirmation to customer
-  notify_admin_new_order(...)                 — full order alert to admin
+  notify_customer_order(...)                  — builds + sends customer confirmation
+  notify_admin_new_order(...)                 — builds + sends admin alert
+  build_customer_order_message(...)           — pure text builder (no I/O), for logging/retry
+  build_admin_order_message(...)              — pure text builder (no I/O), for logging/retry
 """
 from __future__ import annotations
 
@@ -105,9 +107,8 @@ def send_file_by_url(phone: str, url: str, filename: str, caption: str = "") -> 
 
 # ── Order notifications ───────────────────────────────────────────────────────
 
-def notify_customer_order(
+def build_customer_order_message(
     *,
-    phone: str,
     customer_name: str,
     order_id: str,
     items: list[dict[str, Any]],
@@ -118,10 +119,11 @@ def notify_customer_order(
     address: str,
     earned_points: int,
     total_points: int,
-) -> bool:
+) -> str:
     """
-    Rich order confirmation to the customer.
-    Includes product list, subtotal, delivery fee, total, address, and loyalty points.
+    Pure text builder for the rich order confirmation sent to the customer --
+    no I/O. Extracted from notify_customer_order() so the exact text can be
+    logged (and retried) rather than just a summary.
     """
     short_id = order_id[-6:].upper()
 
@@ -143,7 +145,7 @@ def notify_customer_order(
         else f"🚚 التوصيل ({delivery_zone}): {delivery_fee:.2f} MAD"
     )
 
-    msg = (
+    return (
         f"🟢 مرحباً {customer_name}!\n\n"
         f"شكراً لاختيارك GreenGo Market 🛒\n"
         f"رقم طلبك: #{short_id}\n\n"
@@ -159,10 +161,42 @@ def notify_customer_order(
         f"   (كل 10 درهم = نقطة واحدة)\n\n"
         f"سنتواصل معك قريباً للتوصيل. بالصحة والراحة! 🌿"
     )
+
+
+def notify_customer_order(
+    *,
+    phone: str,
+    customer_name: str,
+    order_id: str,
+    items: list[dict[str, Any]],
+    subtotal: float,
+    delivery_zone: str,
+    delivery_fee: float,
+    total: float,
+    address: str,
+    earned_points: int,
+    total_points: int,
+) -> bool:
+    """
+    Rich order confirmation to the customer.
+    Includes product list, subtotal, delivery fee, total, address, and loyalty points.
+    """
+    msg = build_customer_order_message(
+        customer_name=customer_name,
+        order_id=order_id,
+        items=items,
+        subtotal=subtotal,
+        delivery_zone=delivery_zone,
+        delivery_fee=delivery_fee,
+        total=total,
+        address=address,
+        earned_points=earned_points,
+        total_points=total_points,
+    )
     return send_whatsapp_message(phone, msg)
 
 
-def notify_admin_new_order(
+def build_admin_order_message(
     *,
     order_id: str,
     customer_name: str,
@@ -174,16 +208,12 @@ def notify_admin_new_order(
     delivery_zone: str,
     delivery_fee: float,
     total: float,
-) -> bool:
+) -> str:
     """
-    Send new-order alert to the admin WhatsApp number.
-    Sends a text summary first, then one image per product (max 6) with price caption.
+    Pure text builder for the new-order alert sent to the admin -- no I/O.
+    Extracted from notify_admin_new_order() so the exact text can be logged
+    (and retried) rather than just a summary.
     """
-    admin_phone = _ADMIN_PHONE
-    if not admin_phone:
-        logger.warning("[WA] ADMIN_WHATSAPP_PHONE not set — skipping admin notification.")
-        return False
-
     short_id  = order_id[-6:].upper()
     now_str   = datetime.now(tz=timezone.utc).strftime("%H:%M | %d/%m/%Y")
 
@@ -211,7 +241,7 @@ def notify_admin_new_order(
         + ("Gratuite" if delivery_fee == 0 else f"{delivery_fee:.2f} MAD")
     )
 
-    text = (
+    return (
         f"🛒 *طلب جديد — GreenGo Market* 🟢\n\n"
         f"👤 *العميل:*\n"
         f"   Nom: {customer_name}\n"
@@ -226,5 +256,41 @@ def notify_admin_new_order(
         f"   (dont livraison: {delivery_fee:.2f} MAD)\n"
         f"🔢 Commande: #{short_id}\n"
         f"🕐 {now_str}"
+    )
+
+
+def notify_admin_new_order(
+    *,
+    order_id: str,
+    customer_name: str,
+    customer_phone: str,
+    address: str,
+    gps: dict[str, float] | None,
+    items: list[dict[str, Any]],
+    subtotal: float,
+    delivery_zone: str,
+    delivery_fee: float,
+    total: float,
+) -> bool:
+    """
+    Send new-order alert to the admin WhatsApp number.
+    Sends a text summary first, then one image per product (max 6) with price caption.
+    """
+    admin_phone = _ADMIN_PHONE
+    if not admin_phone:
+        logger.warning("[WA] ADMIN_WHATSAPP_PHONE not set — skipping admin notification.")
+        return False
+
+    text = build_admin_order_message(
+        order_id=order_id,
+        customer_name=customer_name,
+        customer_phone=customer_phone,
+        address=address,
+        gps=gps,
+        items=items,
+        subtotal=subtotal,
+        delivery_zone=delivery_zone,
+        delivery_fee=delivery_fee,
+        total=total,
     )
     return send_whatsapp_message(admin_phone, text)
