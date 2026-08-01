@@ -322,6 +322,32 @@ async def list_orders(limit: int = 50, phone: str | None = None, _: None = Depen
     return docs
 
 
+@router.get("/top-products", summary="ONE-TIME report — DELETE AFTER USE")
+async def top_products_report(limit: int = 10, _: None = Depends(require_admin)) -> dict:
+    """
+    Aggregates order line items to find the most-ordered products, used to
+    seed the homepage best-sellers section. Read-only, no writes.
+    """
+    col = orders_col()
+    pipeline = [
+        {"$unwind": "$items"},
+        {"$group": {
+            "_id": "$items.name",
+            "total_qty": {"$sum": "$items.quantity"},
+            "order_count": {"$sum": 1},
+        }},
+        {"$sort": {"order_count": -1}},
+        {"$limit": limit},
+    ]
+    results = [doc async for doc in col.aggregate(pipeline)]
+    return {
+        "top_products": [
+            {"name": r["_id"], "order_count": r["order_count"], "total_qty": r["total_qty"]}
+            for r in results
+        ],
+    }
+
+
 # NOTE: this must stay declared before GET /{order_id} below -- FastAPI matches
 # routes in declaration order, so a request to /orders/track would otherwise be
 # swallowed by /{order_id} (with order_id="track") and always 404.
