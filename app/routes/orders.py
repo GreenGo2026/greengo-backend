@@ -371,6 +371,18 @@ async def track_order_public(order_ref: str | None = None, phone: str | None = N
         # "Out for Delivery".
         raw_status = str(d.get("status", "Pending"))
         normalized_status = raw_status.lower().replace(" ", "_")
+
+        # Per-step timestamps for the tracking timeline -- "to" is normalized
+        # the same way as status above so the frontend can key off the same
+        # step keys (pending/preparing/out_for_delivery/delivered/...).
+        history: list[dict[str, Any]] = []
+        for h in d.get("status_history", []):
+            ts = h.get("timestamp")
+            history.append({
+                "to":        str(h.get("to", "")).lower().replace(" ", "_"),
+                "timestamp": ts.isoformat() if isinstance(ts, datetime) else str(ts or ""),
+            })
+
         results.append({
             "order_ref":          str(d["_id"])[-6:].upper(),
             "status":             normalized_status,
@@ -381,6 +393,7 @@ async def track_order_public(order_ref: str | None = None, phone: str | None = N
             "driver_name":        d.get("driver_name") or None,
             "driver_phone":       d.get("driver_phone") or None,
             "estimated_delivery": d.get("estimated_delivery") or None,
+            "status_history":     history,
         })
     return results
 
