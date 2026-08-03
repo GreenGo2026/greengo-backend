@@ -508,19 +508,23 @@ async def update_order_status(
 
     wa_sent = False
     if payload.notify_customer and customer_phone:
+        tracking_url = f"https://www.mygreengoo.com/suivi-commande?ref={short_id}"
         status_messages = {
             "Confirmed": (
                 f"✅ مرحباً {customer_name}، طلبيتك مؤكدة! كنحضروها دابا. 📦\n"
-                f"Commande confirmée — #{short_id}"
+                f"Commande confirmée — #{short_id}\n\n"
+                f"🔍 تتبع طلبيتك: {tracking_url}"
             ),
             "Preparing": (
                 f"🔵 مرحباً {customer_name}، بدأنا في تحضير طلبك الآن! 📦\n"
-                f"En préparation — commande #{short_id}"
+                f"En préparation — commande #{short_id}\n\n"
+                f"🔍 تتبع طلبيتك: {tracking_url}"
             ),
             "Out for Delivery": (
                 f"🚚 Votre commande #{short_id} est en route!\n"
                 f"Votre livreur vous contactera bientôt.\n\n"
-                f"🛵 {customer_name}، طلبك خرج مع الليفرور!"
+                f"🛵 {customer_name}، طلبك خرج مع الليفرور!\n\n"
+                f"🔍 تتبع طلبيتك: {tracking_url}"
             ),
             "Delivered": (
                 f"✅ Votre commande #{short_id} a été livrée.\n"

@@ -159,6 +159,7 @@ def build_customer_order_message(
         f"⭐ نقاط الولاء المكتسبة: +{earned_points} نقطة\n"
         f"💰 رصيد نقاطك الإجمالي: {total_points} نقطة\n"
         f"   (كل 10 درهم = نقطة واحدة)\n\n"
+        f"🔍 تتبع طلبيتك: https://www.mygreengoo.com/suivi-commande?ref={short_id}\n\n"
         f"سنتواصل معك قريباً للتوصيل. بالصحة والراحة! 🌿"
     )
 
