@@ -383,6 +383,19 @@ async def track_order_public(order_ref: str | None = None, phone: str | None = N
                 "timestamp": ts.isoformat() if isinstance(ts, datetime) else str(ts or ""),
             })
 
+        # Line items for the "reorder" button -- no pricing/PII beyond what
+        # the order already summarizes (name/qty/unit/price the customer
+        # already knows from their own order).
+        items: list[dict[str, Any]] = []
+        for it in d.get("items", []):
+            items.append({
+                "name":           it.get("name", ""),
+                "quantity":       it.get("quantity", 0),
+                "unit":           it.get("unit", "kg"),
+                "price_per_unit": it.get("price_per_unit", 0),
+                "variant_label":  it.get("variant_label"),
+            })
+
         results.append({
             "order_ref":          str(d["_id"])[-6:].upper(),
             "status":             normalized_status,
@@ -390,6 +403,7 @@ async def track_order_public(order_ref: str | None = None, phone: str | None = N
             "total_price":        d.get("total_price", 0),
             "customer_name":      d.get("customer_name", ""),
             "items_count":        len(d.get("items", [])),
+            "items":              items,
             "driver_name":        d.get("driver_name") or None,
             "driver_phone":       d.get("driver_phone") or None,
             "estimated_delivery": d.get("estimated_delivery") or None,
