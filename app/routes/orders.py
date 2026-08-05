@@ -412,6 +412,49 @@ async def track_order_public(order_ref: str | None = None, phone: str | None = N
     return results
 
 
+@router.get("/by-phone/{phone}", summary="Order history by phone — public, safe fields only")
+async def get_orders_by_phone(phone: str, limit: int = 20) -> dict:
+    """
+    Powers UserDashboard.tsx's order history tab (see GET /customers/{phone}/public
+    for the matching profile fix). No auth -- phone is the customer's own
+    identifier, same rationale as GET /orders/track.
+    """
+    p = phone.strip()
+    if p.startswith("0") and len(p) == 10:
+        p = "+212" + p[1:]
+    query = {"$or": [{"phone": p}, {"phone": phone.strip()}]}
+
+    col = orders_col()
+    docs = await col.find(query).sort("created_at", -1).limit(min(limit, 50)).to_list(length=min(limit, 50))
+
+    orders: list[dict[str, Any]] = []
+    for d in docs:
+        created = d.get("created_at")
+        items = [
+            {
+                "name":           it.get("name", ""),
+                "quantity":       it.get("quantity", 0),
+                "unit":           it.get("unit", "kg"),
+                "price_per_unit": it.get("price_per_unit", 0),
+                "variant_label":  it.get("variant_label"),
+            }
+            for it in d.get("items", [])
+        ]
+        orders.append({
+            "id":            str(d["_id"]),
+            "reference":     str(d["_id"])[-6:].upper(),
+            "status":        str(d.get("status", "Pending")).lower().replace(" ", "_"),
+            "created_at":    created.isoformat() if isinstance(created, datetime) else str(created or ""),
+            "total_price":   d.get("total_price", 0),
+            "delivery_fee":  d.get("delivery_fee", 0),
+            "delivery_zone": d.get("delivery_zone", ""),
+            "items":         items,
+            "items_count":   len(items),
+        })
+
+    return {"orders": orders, "count": len(orders)}
+
+
 @router.patch("/{order_id}/status", summary="Update order status")
 async def update_order_status(
     order_id: str,

@@ -22,6 +22,37 @@ def _normalize_phone(phone: str) -> str:
 def _iso(v: Any) -> str:
     return v.isoformat() if isinstance(v, datetime) else str(v or "")
 
+@router.get("/{phone}/public", summary="Returning customer lookup — public, safe fields only")
+@limiter.limit("20/minute")
+async def get_customer_public(phone: str, request: Request) -> dict:
+    """
+    No auth -- phone is the customer's own identifier, same rationale as
+    GET /orders/track. GET /{phone} below looks like it should serve this
+    (its own docstring calls it "checkout autofill + admin CRM detail"),
+    but it was gated behind require_admin when the admin CRM fields
+    (notes/zone/total_spent/full order history) were added, which silently
+    broke both of its original public callers -- CartPage.tsx's "welcome
+    back" autofill and UserDashboard.tsx's profile/orders tabs, which have
+    no admin session and so got a 401 on every request (the calling code
+    only checked res.ok, so nothing surfaced -- it just looked like new
+    customers every time). This is the fix: a dedicated public endpoint
+    with only the fields safe to hand back to an anonymous phone lookup --
+    no notes, no other customers' data.
+    """
+    normalized = _normalize_phone(phone)
+    col = customers_col()
+    doc = await col.find_one({"phone": normalized}) or await col.find_one({"phone": phone.strip()})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Customer not found")
+
+    return {
+        "name":           doc.get("name", ""),
+        "last_address":   doc.get("last_address", ""),
+        "total_orders":   doc.get("total_orders", len(doc.get("orders", []))),
+        "total_points":   doc.get("total_points", 0),
+        "segment":        doc.get("segment", "new"),
+    }
+
 @router.get("", summary="List customers (admin CRM) — search, segment/zone filters")
 async def list_customers(
     search:  str = Query(""),
