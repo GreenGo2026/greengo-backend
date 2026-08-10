@@ -260,6 +260,26 @@ def build_admin_order_message(
     )
 
 
+def build_referral_code_message(customer_name: str, code: str) -> str:
+    """Pure text builder -- announces a newly-issued referral code to its owner."""
+    return (
+        f"🎁 مبروك {customer_name}!\n\n"
+        f"معك دابا كود الإحالة ديالك: *{code}*\n\n"
+        f"شارك هاد الكود مع صحابك — كل واحد كيطلب لأول مرة بالكود ديالك كيربح "
+        f"-15 درهم على الطلبية ديالو، وانت كتربح +50 نقطة ولاء 🎉\n\n"
+        f"شارك دابا: https://mygreengoo.com/?ref={code}"
+    )
+
+
+def build_referral_reward_message(new_total_points: int) -> str:
+    """Pure text builder -- tells a referrer their code was just used."""
+    return (
+        f"🎉 صاحبك طلب بالكود ديالك — ربحتي +50 نقطة!\n\n"
+        f"💰 رصيدك الجديد: {new_total_points} نقطة\n"
+        f"شكراً على الثقة 🌿 GreenGo Market"
+    )
+
+
 def notify_admin_new_order(
     *,
     order_id: str,

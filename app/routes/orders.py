@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import secrets
 from datetime import datetime, timezone
 from typing import Any
 
@@ -15,6 +16,7 @@ from app.services.pdf_generator import generate_invoice_pdf
 from app.database import orders_col, customers_col, products_col, paniers_col
 from app.services.audit import ORDER_TRACKED_FIELDS, _compute_diff, actor_id, log_change, request_ip
 from app.services.notifications import send_and_log, notify_customer_and_log, notify_admin_and_log
+from app.services.whatsapp import build_referral_code_message, build_referral_reward_message
 
 router = APIRouter(prefix="/api/v1/orders", tags=["Orders"])
 
@@ -71,12 +73,14 @@ class CreateOrderPayload(BaseModel):
     delivery_zone: str | None = None
     delivery_fee: float | None = 0
     total_price: float
+    referral_code: str | None = None
 
 class OrderResponse(BaseModel):
     order_id: str
     status: str
     created_at: str
     message: str
+    referral_discount_applied: float = 0.0
 
 class AssignDriverPayload(BaseModel):
     driver_name: str
@@ -95,6 +99,18 @@ def _fmt_items(items: list[OrderItem]) -> str:
 def _calculate_points(total_price: float) -> int:
     """10 MAD = 1 Point. Truncated (no rounding up)."""
     return int(total_price // 10)
+
+# Excludes ambiguous characters (0/O, 1/I/L) so a code read off a phone screen
+# or spoken aloud can't be misheard/mistyped.
+_REFERRAL_CHARSET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
+
+async def _generate_referral_code(cust_col: Any) -> str:
+    """6-char uppercase code, unique against customers_col. Retries on the rare collision."""
+    for _ in range(10):
+        code = "".join(secrets.choice(_REFERRAL_CHARSET) for _ in range(6))
+        if not await cust_col.find_one({"referral_code": code}, {"_id": 1}):
+            return code
+    raise RuntimeError("Could not generate a unique referral code after 10 attempts.")
 
 async def _server_product_info(
     name: str,
@@ -176,6 +192,25 @@ async def create_order(payload: CreateOrderPayload, background_tasks: Background
     delivery_fee = DELIVERY_FEES.get(zone, DELIVERY_FEES[DEFAULT_DELIVERY_ZONE])
     final_total = round(server_total + delivery_fee, 2)
 
+    # ── 1c. Resolve referral-code discount ────────────────────────────────────
+    # Only ever applies to a customer's genuine first order -- checked against
+    # customers_col existing *before* the loyalty upsert below creates it, so a
+    # returning customer can't reuse a code on a later order. Self-referral
+    # (code owner == this phone) and unknown codes are silently ignored: a
+    # stale/bad code shouldn't block checkout, it just doesn't discount.
+    phone_key = payload.phone.strip()
+    referral_discount = 0.0
+    referrer_doc: dict[str, Any] | None = None
+    if payload.referral_code:
+        existing_customer = await cust_col.find_one({"phone": phone_key}, {"_id": 1})
+        if existing_customer is None:
+            referrer_doc = await cust_col.find_one({"referral_code": payload.referral_code.strip().upper()})
+            if referrer_doc and referrer_doc.get("phone") != phone_key:
+                referral_discount = min(15.0, final_total)
+                final_total = round(final_total - referral_discount, 2)
+            else:
+                referrer_doc = None
+
     # ── 2. Build order document ───────────────────────────────────────────────
     doc: dict[str, Any] = {
         "customer_name": payload.customer_name.strip(),
@@ -190,6 +225,8 @@ async def create_order(payload: CreateOrderPayload, background_tasks: Background
         "delivery_fee":  delivery_fee,
         "subtotal":      server_total,
         "total_price":   final_total,
+        "referral_code_used": payload.referral_code.strip().upper() if referral_discount > 0 else None,
+        "referral_discount":  referral_discount,
         "status":        "Pending",
         "created_at":    now,
         "updated_at":    now,
@@ -206,7 +243,6 @@ async def create_order(payload: CreateOrderPayload, background_tasks: Background
     earned_points = _calculate_points(server_total)
     points_to_deduct = payload.points_used if payload.use_points and payload.points_used > 0 else 0
     net_points_delta  = earned_points - points_to_deduct
-    phone_key     = payload.phone.strip()
 
     try:
         update_result = await cust_col.find_one_and_update(
@@ -230,6 +266,7 @@ async def create_order(payload: CreateOrderPayload, background_tasks: Background
                     "last_order_id": order_id,
                     "updated_at":    now,
                     "zone":          zone,
+                    **({"referred_by_phone": referrer_doc["phone"]} if referrer_doc else {}),
                 },
                 "$min": {"first_order": now},
                 "$max": {"last_order":  now},
@@ -253,6 +290,33 @@ async def create_order(payload: CreateOrderPayload, background_tasks: Background
         orders_count = update_result.get("total_orders", 1) if update_result else 1
         segment = "vip" if orders_count >= 10 else "regular" if orders_count >= 3 else "new"
         await cust_col.update_one({"phone": phone_key}, {"$set": {"segment": segment}})
+
+        # ── 3b. Referral-code issuance ─────────────────────────────────────────
+        # Checked via "no code yet" rather than "orders_count == 3" so this is
+        # self-healing -- backfills customers who already had 3+ orders before
+        # this feature shipped, and retries if a previous attempt never set it.
+        if orders_count >= 3 and not (update_result or {}).get("referral_code"):
+            new_code = await _generate_referral_code(cust_col)
+            await cust_col.update_one({"phone": phone_key}, {"$set": {"referral_code": new_code}})
+            background_tasks.add_task(
+                send_and_log, phone_key,
+                build_referral_code_message(payload.customer_name, new_code),
+                "referral_code_issued", order_id, short_id,
+            )
+
+        # ── 3c. Referral reward -- credit the referrer who owns the code used ──
+        if referrer_doc:
+            updated_referrer = await cust_col.find_one_and_update(
+                {"phone": referrer_doc["phone"]},
+                {"$inc": {"total_points": 50, "referral_credits": 1}},
+                return_document=True,
+            )
+            referrer_new_points = updated_referrer.get("total_points", 0) if updated_referrer else 0
+            background_tasks.add_task(
+                send_and_log, referrer_doc["phone"],
+                build_referral_reward_message(referrer_new_points),
+                "referral_reward", order_id, short_id,
+            )
     except Exception as exc:
         # Loyalty failure must NOT block the order confirmation
         total_points = earned_points
@@ -300,6 +364,7 @@ async def create_order(payload: CreateOrderPayload, background_tasks: Background
         status="Pending",
         created_at=now.isoformat(),
         message=f"Order {order_id} created successfully.",
+        referral_discount_applied=referral_discount,
     )
 
 

@@ -51,7 +51,24 @@ async def get_customer_public(phone: str, request: Request) -> dict:
         "total_orders":   doc.get("total_orders", len(doc.get("orders", []))),
         "total_points":   doc.get("total_points", 0),
         "segment":        doc.get("segment", "new"),
+        "referral_code":  doc.get("referral_code"),
     }
+
+# NOTE: must stay declared before GET /{phone} below -- FastAPI matches routes
+# in declaration order, so a request to /customers/referral/XXXX would otherwise
+# be swallowed by /{phone} (with phone="referral") and always 404. Same fix
+# already applied to /orders/track vs /orders/{order_id} in orders.py.
+@router.get("/referral/{code}", summary="Look up a referral code — public, name only")
+@limiter.limit("20/minute")
+async def get_referral_code(code: str, request: Request) -> dict:
+    """Used by the frontend to show 'Code de {name} : -15 MAD' before checkout.
+    Never returns the referrer's phone -- only whether the code is valid and
+    the first name to display."""
+    col = customers_col()
+    doc = await col.find_one({"referral_code": code.strip().upper()}, {"name": 1})
+    if not doc:
+        return {"valid": False, "referrer_name": ""}
+    return {"valid": True, "referrer_name": doc.get("name", "")}
 
 @router.get("", summary="List customers (admin CRM) — search, segment/zone filters")
 async def list_customers(
@@ -176,6 +193,8 @@ async def get_customer(phone: str, request: Request, _: None = Depends(require_a
         "last_order":    _iso(doc.get("last_order")),
         "notes":         doc.get("notes", []),
         "orders":        order_history,
+        "referral_code": doc.get("referral_code"),
+        "referral_credits": doc.get("referral_credits", 0),
     }
 
 @router.post("/{phone}/notes", summary="Add an admin note to a customer profile")

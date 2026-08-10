@@ -149,6 +149,9 @@ async def _init_indexes() -> None:
             IndexModel([("phone", ASCENDING)], unique=True, name="uq_customer_phone"),
             IndexModel([("segment", ASCENDING)], name="idx_customer_segment"),
             IndexModel([("total_spent", DESCENDING)], name="idx_customer_total_spent"),
+            # Sparse -- most customers don't have a referral code yet (only
+            # granted at their 3rd order), so this can't be a plain unique index.
+            IndexModel([("referral_code", ASCENDING)], unique=True, sparse=True, name="uq_customer_referral_code"),
         ]),
         ("audit_log", audit_log_col(), [
             IndexModel(
