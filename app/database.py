@@ -109,6 +109,8 @@ def newsletter_col()      -> AsyncIOMotorCollection: return _col("newsletter")
 def audit_log_col()       -> AsyncIOMotorCollection: return _col("audit_log")
 def notifications_col()   -> AsyncIOMotorCollection: return _col("notifications")
 def session_log_col()     -> AsyncIOMotorCollection: return _col("session_log")
+def challenges_col()             -> AsyncIOMotorCollection: return _col("challenges")
+def challenge_completions_col()  -> AsyncIOMotorCollection: return _col("challenge_completions")
 
 
 # ---------------------------------------------------------------------------
@@ -171,6 +173,11 @@ async def _init_indexes() -> None:
             IndexModel([("event", ASCENDING), ("timestamp", DESCENDING)], name="event_timestamp_idx"),
             # 90-day retention.
             IndexModel([("timestamp", ASCENDING)], expireAfterSeconds=7_776_000, name="ttl_90d_sessions"),
+        ]),
+        ("challenge_completions", challenge_completions_col(), [
+            # The weekly challenge check queries by phone + completed_at range
+            # every order -- this is the hot path for that lookup.
+            IndexModel([("phone", ASCENDING), ("completed_at", DESCENDING)], name="idx_challenge_phone_date"),
         ]),
     ]
 

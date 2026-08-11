@@ -17,6 +17,7 @@ from app.database import orders_col, customers_col, products_col, paniers_col
 from app.services.audit import ORDER_TRACKED_FIELDS, _compute_diff, actor_id, log_change, request_ip
 from app.services.notifications import send_and_log, notify_customer_and_log, notify_admin_and_log
 from app.services.whatsapp import build_referral_code_message, build_referral_reward_message
+from app.routes.challenges import check_challenges_and_notify
 
 router = APIRouter(prefix="/api/v1/orders", tags=["Orders"])
 
@@ -288,7 +289,7 @@ async def create_order(payload: CreateOrderPayload, background_tasks: Background
         # Segment recompute -- needs the post-increment total_orders, so it's
         # a second, cheap update rather than part of the atomic upsert above.
         orders_count = update_result.get("total_orders", 1) if update_result else 1
-        segment = "vip" if orders_count >= 10 else "regular" if orders_count >= 3 else "new"
+        segment = "elite" if orders_count >= 25 else "vip" if orders_count >= 10 else "regular" if orders_count >= 3 else "new"
         await cust_col.update_one({"phone": phone_key}, {"$set": {"segment": segment}})
 
         # ── 3b. Referral-code issuance ─────────────────────────────────────────
@@ -317,6 +318,9 @@ async def create_order(payload: CreateOrderPayload, background_tasks: Background
                 build_referral_reward_message(referrer_new_points),
                 "referral_reward", order_id, short_id,
             )
+
+        # ── 3d. Weekly challenges -- credit + notify if this order completed any ──
+        background_tasks.add_task(check_challenges_and_notify, phone_key, order_id)
     except Exception as exc:
         # Loyalty failure must NOT block the order confirmation
         total_points = earned_points
