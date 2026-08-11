@@ -75,6 +75,7 @@ class CreateOrderPayload(BaseModel):
     delivery_fee: float | None = 0
     total_price: float
     referral_code: str | None = None
+    welcome_discount: float | None = 0
 
 class OrderResponse(BaseModel):
     order_id: str
@@ -82,6 +83,7 @@ class OrderResponse(BaseModel):
     created_at: str
     message: str
     referral_discount_applied: float = 0.0
+    welcome_discount_applied: float = 0.0
 
 class AssignDriverPayload(BaseModel):
     driver_name: str
@@ -193,24 +195,32 @@ async def create_order(payload: CreateOrderPayload, background_tasks: Background
     delivery_fee = DELIVERY_FEES.get(zone, DELIVERY_FEES[DEFAULT_DELIVERY_ZONE])
     final_total = round(server_total + delivery_fee, 2)
 
-    # ── 1c. Resolve referral-code discount ────────────────────────────────────
-    # Only ever applies to a customer's genuine first order -- checked against
-    # customers_col existing *before* the loyalty upsert below creates it, so a
-    # returning customer can't reuse a code on a later order. Self-referral
-    # (code owner == this phone) and unknown codes are silently ignored: a
-    # stale/bad code shouldn't block checkout, it just doesn't discount.
+    # ── 1c. Resolve first-order discounts (referral code, welcome offer) ──────
+    # Both only ever apply to a customer's genuine first order -- checked
+    # against customers_col existing *before* the loyalty upsert below
+    # creates it, so a returning customer can't reuse either on a later
+    # order. Self-referral (code owner == this phone) and unknown codes are
+    # silently ignored: a stale/bad code shouldn't block checkout, it just
+    # doesn't discount. The two never stack -- welcome only applies when no
+    # referral discount landed.
     phone_key = payload.phone.strip()
     referral_discount = 0.0
+    welcome_discount = 0.0
     referrer_doc: dict[str, Any] | None = None
-    if payload.referral_code:
-        existing_customer = await cust_col.find_one({"phone": phone_key}, {"_id": 1})
-        if existing_customer is None:
-            referrer_doc = await cust_col.find_one({"referral_code": payload.referral_code.strip().upper()})
-            if referrer_doc and referrer_doc.get("phone") != phone_key:
-                referral_discount = min(15.0, final_total)
-                final_total = round(final_total - referral_discount, 2)
-            else:
-                referrer_doc = None
+    existing_customer = await cust_col.find_one({"phone": phone_key}, {"_id": 1})
+    is_first_order = existing_customer is None
+
+    if payload.referral_code and is_first_order:
+        referrer_doc = await cust_col.find_one({"referral_code": payload.referral_code.strip().upper()})
+        if referrer_doc and referrer_doc.get("phone") != phone_key:
+            referral_discount = min(15.0, final_total)
+            final_total = round(final_total - referral_discount, 2)
+        else:
+            referrer_doc = None
+
+    if referral_discount == 0 and is_first_order and (payload.welcome_discount or 0) > 0:
+        welcome_discount = min(10.0, float(payload.welcome_discount), final_total)
+        final_total = round(final_total - welcome_discount, 2)
 
     # ── 2. Build order document ───────────────────────────────────────────────
     doc: dict[str, Any] = {
@@ -228,6 +238,7 @@ async def create_order(payload: CreateOrderPayload, background_tasks: Background
         "total_price":   final_total,
         "referral_code_used": payload.referral_code.strip().upper() if referral_discount > 0 else None,
         "referral_discount":  referral_discount,
+        "welcome_discount":   welcome_discount,
         "status":        "Pending",
         "created_at":    now,
         "updated_at":    now,
@@ -369,6 +380,7 @@ async def create_order(payload: CreateOrderPayload, background_tasks: Background
         created_at=now.isoformat(),
         message=f"Order {order_id} created successfully.",
         referral_discount_applied=referral_discount,
+        welcome_discount_applied=welcome_discount,
     )
 
 
