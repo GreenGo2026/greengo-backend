@@ -111,6 +111,7 @@ def notifications_col()   -> AsyncIOMotorCollection: return _col("notifications"
 def session_log_col()     -> AsyncIOMotorCollection: return _col("session_log")
 def challenges_col()             -> AsyncIOMotorCollection: return _col("challenges")
 def challenge_completions_col()  -> AsyncIOMotorCollection: return _col("challenge_completions")
+def recipes_col()                -> AsyncIOMotorCollection: return _col("recipes")
 
 
 # ---------------------------------------------------------------------------
@@ -178,6 +179,9 @@ async def _init_indexes() -> None:
             # The weekly challenge check queries by phone + completed_at range
             # every order -- this is the hot path for that lookup.
             IndexModel([("phone", ASCENDING), ("completed_at", DESCENDING)], name="idx_challenge_phone_date"),
+        ]),
+        ("recipes", recipes_col(), [
+            IndexModel([("slug", ASCENDING)], unique=True, name="uq_recipe_slug"),
         ]),
     ]
 
