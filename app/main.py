@@ -60,6 +60,7 @@ from app.routes.notifications   import router as notifications_router
 from app.routes.admin_sessions  import router as admin_sessions_router
 from app.routes.challenges      import router as challenges_router
 from app.routes.recipes         import router as recipes_router
+from app.routes.shared_carts    import router as shared_carts_router
 
 # ---------------------------------------------------------------------------
 # New models imported directly from their modules (not via __init__)
@@ -647,6 +648,7 @@ app.include_router(notifications_router)
 app.include_router(admin_sessions_router)
 app.include_router(challenges_router)
 app.include_router(recipes_router)
+app.include_router(shared_carts_router)
 
 
 # ===========================================================================

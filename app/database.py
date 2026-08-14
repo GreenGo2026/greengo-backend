@@ -112,6 +112,7 @@ def session_log_col()     -> AsyncIOMotorCollection: return _col("session_log")
 def challenges_col()             -> AsyncIOMotorCollection: return _col("challenges")
 def challenge_completions_col()  -> AsyncIOMotorCollection: return _col("challenge_completions")
 def recipes_col()                -> AsyncIOMotorCollection: return _col("recipes")
+def shared_carts_col()           -> AsyncIOMotorCollection: return _col("shared_carts")
 
 
 # ---------------------------------------------------------------------------
@@ -182,6 +183,11 @@ async def _init_indexes() -> None:
         ]),
         ("recipes", recipes_col(), [
             IndexModel([("slug", ASCENDING)], unique=True, name="uq_recipe_slug"),
+        ]),
+        ("shared_carts", shared_carts_col(), [
+            IndexModel([("share_id", ASCENDING)], unique=True, name="uq_shared_cart_share_id"),
+            # TTL cleanup -- MongoDB deletes the document once expires_at passes.
+            IndexModel([("expires_at", ASCENDING)], expireAfterSeconds=0, name="ttl_shared_cart_expiry"),
         ]),
     ]
 
