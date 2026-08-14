@@ -1,10 +1,14 @@
 # app/routes/recipes.py
 from __future__ import annotations
 
+import re
+import unicodedata
 from datetime import datetime, timezone
 from typing import Any
 
+from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 
 from app.auth import require_admin
 from app.database import products_col, recipes_col
@@ -258,3 +262,133 @@ async def seed_recipes(_: None = Depends(require_admin)) -> dict[str, Any]:
             seeded += 1
 
     return {"seeded": seeded, "total": len(INITIAL_RECIPES), "message": f"{seeded} recettes ajoutées"}
+
+
+# ── Admin CRUD ──────────────────────────────────────────────────────────────────
+
+class IngredientInput(BaseModel):
+    name_fr: str
+    quantity: float
+    unit: str
+    optional: bool = False
+    note_fr: str | None = None
+    not_in_catalog: bool = False
+
+
+class RecipeInput(BaseModel):
+    name_fr: str
+    name_ar: str
+    description_fr: str
+    emoji: str = "🍽️"
+    servings: int = 4
+    prep_time_min: int = 0
+    cook_time_min: int = 0
+    visible: bool = True
+    ingredients: list[IngredientInput]
+
+
+def _slug_from_name(name: str) -> str:
+    """Generate a URL slug from a French recipe name (accents stripped)."""
+    nfkd = unicodedata.normalize("NFKD", name)
+    ascii_str = nfkd.encode("ascii", "ignore").decode("ascii")
+    slug = re.sub(r"[^\w\s-]", "", ascii_str)
+    slug = re.sub(r"[\s_]+", "-", slug).strip("-")
+    return slug.lower()
+
+
+def _oid(recipe_id: str) -> ObjectId:
+    try:
+        return ObjectId(recipe_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="ID invalide")
+
+
+# NOTE: /admin/list must stay declared before /admin/{recipe_id} below -- both
+# are GET on a 2-segment path, so declaration order decides which one a
+# request to /recipes/admin/list would match (same issue already solved for
+# /orders/track vs /orders/{order_id} in orders.py).
+@router.get("/admin/list", summary="Admin: list ALL recipes, including hidden ones")
+async def admin_list_recipes(_: None = Depends(require_admin)) -> dict[str, Any]:
+    recipes = await recipes_col().find({}).sort("created_at", -1).to_list(200)
+    return {
+        "recipes": [
+            {
+                "id":                 str(r["_id"]),
+                "slug":               r.get("slug"),
+                "name_fr":            r.get("name_fr"),
+                "name_ar":            r.get("name_ar"),
+                "emoji":              r.get("emoji", "🍽️"),
+                "visible":            r.get("visible", True),
+                "servings":           r.get("servings", 4),
+                "prep_time_min":      r.get("prep_time_min", 0),
+                "cook_time_min":      r.get("cook_time_min", 0),
+                "ingredients_count":  len(r.get("ingredients", [])),
+                "created_at":         str(r.get("created_at", "")),
+            }
+            for r in recipes
+        ]
+    }
+
+
+@router.get("/admin/{recipe_id}", summary="Admin: get full recipe for editing")
+async def admin_get_recipe(recipe_id: str, _: None = Depends(require_admin)) -> dict[str, Any]:
+    recipe = await recipes_col().find_one({"_id": _oid(recipe_id)})
+    if not recipe:
+        raise HTTPException(status_code=404, detail="Non trouvée")
+
+    recipe["id"] = str(recipe.pop("_id"))
+    recipe["created_at"] = str(recipe.get("created_at", ""))
+    recipe["updated_at"] = str(recipe.get("updated_at", ""))
+    return recipe
+
+
+@router.post("/admin", summary="Admin: create a new recipe")
+async def admin_create_recipe(payload: RecipeInput, _: None = Depends(require_admin)) -> dict[str, Any]:
+    slug = _slug_from_name(payload.name_fr)
+
+    existing = await recipes_col().find_one({"slug": slug})
+    if existing:
+        slug = f"{slug}-{str(ObjectId())[:6]}"
+
+    now = datetime.now(tz=timezone.utc)
+    doc = {**payload.model_dump(), "slug": slug, "created_at": now, "updated_at": now}
+
+    result = await recipes_col().insert_one(doc)
+    return {"id": str(result.inserted_id), "slug": slug, "message": "Recette créée"}
+
+
+@router.patch("/admin/{recipe_id}", summary="Admin: update a recipe (partial)")
+async def admin_update_recipe(recipe_id: str, payload: dict[str, Any], _: None = Depends(require_admin)) -> dict[str, Any]:
+    oid = _oid(recipe_id)
+
+    # _id is immutable; everything else (including slug) may be patched.
+    payload.pop("_id", None)
+    payload.pop("id", None)
+    payload["updated_at"] = datetime.now(tz=timezone.utc)
+
+    result = await recipes_col().update_one({"_id": oid}, {"$set": payload})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Non trouvée")
+
+    return {"message": "Recette mise à jour"}
+
+
+@router.delete("/admin/{recipe_id}", summary="Admin: delete a recipe")
+async def admin_delete_recipe(recipe_id: str, _: None = Depends(require_admin)) -> dict[str, Any]:
+    result = await recipes_col().delete_one({"_id": _oid(recipe_id)})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Non trouvée")
+
+    return {"message": "Recette supprimée"}
+
+
+@router.patch("/admin/{recipe_id}/toggle-visible", summary="Admin: toggle a recipe's visibility")
+async def toggle_recipe_visibility(recipe_id: str, _: None = Depends(require_admin)) -> dict[str, Any]:
+    oid = _oid(recipe_id)
+    recipe = await recipes_col().find_one({"_id": oid}, {"visible": 1})
+    if not recipe:
+        raise HTTPException(status_code=404, detail="Non trouvée")
+
+    new_val = not recipe.get("visible", True)
+    await recipes_col().update_one({"_id": oid}, {"$set": {"visible": new_val, "updated_at": datetime.now(tz=timezone.utc)}})
+    return {"visible": new_val}
