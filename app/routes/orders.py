@@ -43,7 +43,12 @@ STATUS_TRANSITIONS: dict[str, list[str]] = {
     "Pending":          ["Confirmed", "Cancelled"],
     "Confirmed":        ["Preparing", "Cancelled"],
     "Preparing":        ["Out for Delivery", "Cancelled"],
-    "Out for Delivery": ["Delivered", "Cancelled"],
+    # A driver marking a delivery done lands on "Pending Confirmation", not
+    # "Delivered" -- only an admin closes an order out. "Delivered" stays
+    # reachable directly so an admin can still complete a delivery the driver
+    # never marked (phone dead, app not used).
+    "Out for Delivery": ["Delivered", "Pending Confirmation", "Cancelled"],
+    "Pending Confirmation": ["Delivered", "Cancelled"],
     "Delivered":        ["Completed"],
     "Completed":        [],
     "Cancelled":        [],
@@ -91,6 +96,11 @@ class OrderResponse(BaseModel):
 class AssignDriverPayload(BaseModel):
     driver_name: str
     driver_phone: str
+    # Optional link to a registered driver in the drivers collection. When
+    # present it sets assigned_livreur_id, which is what the livreur portal
+    # filters its delivery list on. Left optional so the existing free-text
+    # assignment (a one-off driver with no portal account) keeps working.
+    driver_id: str | None = None
 
 class OrderStatusUpdate(BaseModel):
     status: str
@@ -627,6 +637,11 @@ async def update_order_status(
         "out_for_delivery": "Out for Delivery",
         "out for delivery": "Out for Delivery",
         "delivered":        "Delivered",
+        # Driver-submitted deliveries awaiting an admin sign-off. The snake_case
+        # alias is what the livreur portal and admin UI send.
+        "pending_admin_confirmation": "Pending Confirmation",
+        "pending confirmation":       "Pending Confirmation",
+        "pending_confirmation":       "Pending Confirmation",
         "cancelled":        "Cancelled",
         "canceled":         "Cancelled",
         "completed":        "Completed",
@@ -858,15 +873,16 @@ async def assign_driver(
     _: None = Depends(require_admin),
 ) -> dict[str, Any]:
     col = orders_col()
+    updates: dict[str, Any] = {
+        "driver_name":  payload.driver_name.strip(),
+        "driver_phone": payload.driver_phone.strip(),
+        "updated_at":   datetime.now(tz=timezone.utc),
+    }
+    if payload.driver_id:
+        updates["assigned_livreur_id"] = payload.driver_id.strip()
+
     try:
-        result = await col.update_one(
-            {"_id": ObjectId(order_id)},
-            {"$set": {
-                "driver_name":  payload.driver_name.strip(),
-                "driver_phone": payload.driver_phone.strip(),
-                "updated_at":   datetime.now(tz=timezone.utc),
-            }},
-        )
+        result = await col.update_one({"_id": ObjectId(order_id)}, {"$set": updates})
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid order ID")
     if result.matched_count == 0:
@@ -875,6 +891,7 @@ async def assign_driver(
         "order_id":     order_id,
         "driver_name":  payload.driver_name.strip(),
         "driver_phone": payload.driver_phone.strip(),
+        "assigned_livreur_id": updates.get("assigned_livreur_id"),
     }
 
 

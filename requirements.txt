@@ -66,3 +66,4 @@ pyotp==2.9.0
 passlib==1.7.4
 qrcode[pil]
 cloudinary==1.44.4
+bcrypt==5.0.0
