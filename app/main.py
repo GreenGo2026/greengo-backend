@@ -509,7 +509,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 pass
 
     _keepalive = asyncio.create_task(_mongo_keepalive())
+
+    # Periodic jobs -- registered here (not at import time) so a job's module
+    # can't run before connect_db() above.
+    from app.services.loyalty import expire_stale_points
+    from app.services.scheduler import register_job, start_scheduler, stop_scheduler
+
+    register_job("loyalty-expiry", 24 * 60 * 60, expire_stale_points)
+    _jobs = start_scheduler()
+
     yield
+
+    await stop_scheduler(_jobs)
     _keepalive.cancel()
     close_db()
 
