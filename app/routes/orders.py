@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field, AliasChoices
 import io
 from fastapi.responses import StreamingResponse
 from app.auth import require_admin
+from app.config import get_settings
 from app.services.pdf_generator import generate_invoice_pdf
 from app.database import orders_col, customers_col, products_col, paniers_col
 from app.services.audit import ORDER_TRACKED_FIELDS, _compute_diff, actor_id, log_change, request_ip
@@ -84,6 +85,8 @@ class OrderResponse(BaseModel):
     message: str
     referral_discount_applied: float = 0.0
     welcome_discount_applied: float = 0.0
+    points_redeemed: int = 0
+    points_discount_applied: float = 0.0
 
 class AssignDriverPayload(BaseModel):
     driver_name: str
@@ -102,6 +105,53 @@ def _fmt_items(items: list[OrderItem]) -> str:
 def _calculate_points(total_price: float) -> int:
     """10 MAD = 1 Point. Truncated (no rounding up)."""
     return int(total_price // 10)
+
+def _resolve_points_redemption(
+    *,
+    use_points:    bool,
+    points_used:   int,
+    points_balance: int,
+    server_total:  float,
+    final_total:   float,
+    cfg: Any,
+) -> tuple[int, float]:
+    """
+    Resolve how many points are actually redeemed and the MAD discount they buy.
+
+    Authoritative -- same rationale as prices and the delivery fee: the client's
+    points_used is a *request*, never the amount redeemed. It's clamped to the
+    balance read from the DB, so a crafted payload can't drive a balance
+    negative or buy a discount the customer hasn't earned.
+
+    Redemption is in whole blocks (LOYALTY_POINTS_PER_BLOCK -> LOYALTY_MAD_PER_BLOCK),
+    gated on LOYALTY_MIN_ORDER_TO_REDEEM against the goods subtotal, and capped at
+    LOYALTY_MAX_DISCOUNT_PCT of that subtotal.
+
+    Returns (points_redeemed, points_discount) -- both 0 when nothing redeems.
+    Callers MUST derive the deduction and the discount from this single result,
+    so the amount charged and the balance can never diverge.
+    """
+    if not use_points or points_used <= 0 or points_balance <= 0:
+        return 0, 0.0
+    if server_total < cfg.LOYALTY_MIN_ORDER_TO_REDEEM:
+        return 0, 0.0
+    if cfg.LOYALTY_MAD_PER_BLOCK <= 0:
+        return 0, 0.0
+
+    block_pts = max(1, cfg.LOYALTY_POINTS_PER_BLOCK)
+    cap_mad   = round(server_total * cfg.LOYALTY_MAX_DISCOUNT_PCT / 100.0, 2)
+    blocks = min(
+        points_used    // block_pts,   # what the customer asked for
+        points_balance // block_pts,   # what they actually hold
+        int(cap_mad // cfg.LOYALTY_MAD_PER_BLOCK),
+    )
+    if blocks <= 0:
+        return 0, 0.0
+
+    points_redeemed = blocks * block_pts
+    # never discount below zero
+    points_discount = min(round(blocks * cfg.LOYALTY_MAD_PER_BLOCK, 2), final_total)
+    return points_redeemed, points_discount
 
 # Excludes ambiguous characters (0/O, 1/I/L) so a code read off a phone screen
 # or spoken aloud can't be misheard/mistyped.
@@ -207,7 +257,9 @@ async def create_order(payload: CreateOrderPayload, background_tasks: Background
     referral_discount = 0.0
     welcome_discount = 0.0
     referrer_doc: dict[str, Any] | None = None
-    existing_customer = await cust_col.find_one({"phone": phone_key}, {"_id": 1})
+    existing_customer = await cust_col.find_one(
+        {"phone": phone_key}, {"_id": 1, "total_points": 1}
+    )
     is_first_order = existing_customer is None
 
     if payload.referral_code and is_first_order:
@@ -221,6 +273,22 @@ async def create_order(payload: CreateOrderPayload, background_tasks: Background
     if referral_discount == 0 and is_first_order and (payload.welcome_discount or 0) > 0:
         welcome_discount = min(10.0, float(payload.welcome_discount), final_total)
         final_total = round(final_total - welcome_discount, 2)
+
+    # ── 1d. Resolve loyalty points redemption ─────────────────────────────────
+    # Both the discount and the points deduction below derive from this single
+    # result, so the amount charged and the balance can never diverge --
+    # previously points were deducted while final_total was left untouched, so
+    # redeeming cost the customer points and discounted nothing.
+    points_balance = int((existing_customer or {}).get("total_points") or 0)
+    points_redeemed, points_discount = _resolve_points_redemption(
+        use_points     = payload.use_points,
+        points_used    = payload.points_used,
+        points_balance = points_balance,
+        server_total   = server_total,
+        final_total    = final_total,
+        cfg            = get_settings(),
+    )
+    final_total = round(final_total - points_discount, 2)
 
     # ── 2. Build order document ───────────────────────────────────────────────
     doc: dict[str, Any] = {
@@ -239,6 +307,8 @@ async def create_order(payload: CreateOrderPayload, background_tasks: Background
         "referral_code_used": payload.referral_code.strip().upper() if referral_discount > 0 else None,
         "referral_discount":  referral_discount,
         "welcome_discount":   welcome_discount,
+        "points_redeemed":    points_redeemed,
+        "points_discount":    points_discount,
         "status":        "Pending",
         "created_at":    now,
         "updated_at":    now,
@@ -253,7 +323,8 @@ async def create_order(payload: CreateOrderPayload, background_tasks: Background
 
     # ── 3. Loyalty — upsert customer & accumulate points ──────────────────────
     earned_points = _calculate_points(server_total)
-    points_to_deduct = payload.points_used if payload.use_points and payload.points_used > 0 else 0
+    # Server-resolved in 1d -- never payload.points_used.
+    points_to_deduct = points_redeemed
     net_points_delta  = earned_points - points_to_deduct
 
     try:
@@ -278,6 +349,8 @@ async def create_order(payload: CreateOrderPayload, background_tasks: Background
                     "last_order_id": order_id,
                     "updated_at":    now,
                     "zone":          zone,
+                    # Resets the inactivity clock the expiry sweep reads.
+                    "points_last_activity": now,
                     **({"referred_by_phone": referrer_doc["phone"]} if referrer_doc else {}),
                 },
                 "$min": {"first_order": now},
@@ -381,6 +454,8 @@ async def create_order(payload: CreateOrderPayload, background_tasks: Background
         message=f"Order {order_id} created successfully.",
         referral_discount_applied=referral_discount,
         welcome_discount_applied=welcome_discount,
+        points_redeemed=points_redeemed,
+        points_discount_applied=points_discount,
     )
 
 

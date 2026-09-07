@@ -19,10 +19,17 @@ ENV/
 .env.*
 
 # Uploads (ephemeral — use Cloudinary)
+# Recursive: source images also land in assets/products/<batch>/ and images/,
+# which the single-level patterns above missed.
+assets/products/**/*.webp
+assets/products/**/*.jpg
+assets/products/**/*.png
+assets/products/**/*.jpeg
 assets/products/*.webp
 assets/products/*.jpg
 assets/products/*.png
 assets/products/*.jpeg
+images/
 
 # IDE
 .vscode/

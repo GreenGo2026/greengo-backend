@@ -41,6 +41,17 @@ class Settings(BaseSettings):
     ADMIN_PASSWORD_HASH: str = ""   # bcrypt hash — never store plaintext
     ADMIN_TOTP_SECRET:   str = ""   # base32 TOTP secret for Google Authenticator
 
+    # ── Loyalty redemption ───────────────────────────────────────────────────
+    # Points redeem in whole blocks: LOYALTY_POINTS_PER_BLOCK points buy
+    # LOYALTY_MAD_PER_BLOCK MAD off. Redemption is gated on a minimum cart
+    # and capped at a percentage of the goods subtotal so points can never
+    # wipe out an order.
+    LOYALTY_POINTS_PER_BLOCK:   int   = 100
+    LOYALTY_MAD_PER_BLOCK:      float = 4.0
+    LOYALTY_MIN_ORDER_TO_REDEEM: float = 120.0
+    LOYALTY_MAX_DISCOUNT_PCT:   float = 10.0
+    LOYALTY_EXPIRY_DAYS:        int   = 90
+
     # ── Application ──────────────────────────────────────────────────────────
     APP_ENV:   str  = "development"
     APP_DEBUG: bool = False
