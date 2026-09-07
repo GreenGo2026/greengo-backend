@@ -114,6 +114,7 @@ def challenge_completions_col()  -> AsyncIOMotorCollection: return _col("challen
 def recipes_col()                -> AsyncIOMotorCollection: return _col("recipes")
 def shared_carts_col()           -> AsyncIOMotorCollection: return _col("shared_carts")
 def drivers_col()                -> AsyncIOMotorCollection: return _col("drivers")
+def cart_sessions_col()          -> AsyncIOMotorCollection: return _col("cart_sessions")
 
 
 # ---------------------------------------------------------------------------
@@ -194,6 +195,18 @@ async def _init_indexes() -> None:
             IndexModel([("phone", ASCENDING)], unique=True, name="uq_driver_phone"),
             # PIN login scans active drivers only -- see livreur.py.
             IndexModel([("active", ASCENDING)], name="idx_driver_active"),
+        ]),
+        ("cart_sessions", cart_sessions_col(), [
+            # One live session per phone -- POST upserts on this key.
+            IndexModel([("phone", ASCENDING)], unique=True, name="uq_cart_session_phone"),
+            # Drives the recovery sweep's candidate query.
+            IndexModel(
+                [("converted", ASCENDING), ("reminder_sent", ASCENDING), ("created_at", ASCENDING)],
+                name="idx_cart_session_recovery",
+            ),
+            # Housekeeping: sessions are worthless after 30 days.
+            IndexModel([("created_at", ASCENDING)], expireAfterSeconds=30 * 24 * 3600,
+                       name="ttl_cart_session"),
         ]),
     ]
 

@@ -52,6 +52,18 @@ class Settings(BaseSettings):
     LOYALTY_MAX_DISCOUNT_PCT:   float = 10.0
     LOYALTY_EXPIRY_DAYS:        int   = 90
 
+    # ── Abandoned cart recovery ──────────────────────────────────────────────
+    # Ships DISABLED. With it off the sweep logs the exact message it would
+    # send and marks nothing, so the delivery log can be reviewed before real
+    # messages reach customers. Flip CART_RECOVERY_ENABLED=true to go live.
+    CART_RECOVERY_ENABLED:        bool  = False
+    CART_RECOVERY_DELAY_HOURS:    float = 2.0
+    # Upper bound on cart age. Without it, enabling the feature after a period
+    # of dry-running would message every cart abandoned in the meantime at
+    # once -- and a cart abandoned days ago is stale anyway.
+    CART_RECOVERY_MAX_AGE_HOURS:  float = 24.0
+    SITE_URL:                     str   = "https://www.mygreengoo.com"
+
     # ── Application ──────────────────────────────────────────────────────────
     APP_ENV:   str  = "development"
     APP_DEBUG: bool = False

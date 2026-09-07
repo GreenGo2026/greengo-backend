@@ -62,6 +62,7 @@ from app.routes.challenges      import router as challenges_router
 from app.routes.recipes         import router as recipes_router
 from app.routes.shared_carts    import router as shared_carts_router
 from app.routes.livreur         import admin_drivers_router, livreur_router
+from app.routes.cart_sessions   import router as cart_sessions_router
 
 # ---------------------------------------------------------------------------
 # New models imported directly from their modules (not via __init__)
@@ -513,11 +514,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Periodic jobs -- registered here (not at import time) so a job's module
     # can't run before connect_db() above.
+    from app.routes.cart_sessions import send_cart_recovery_reminders
     from app.services.loyalty import expire_stale_points
     from app.services.scheduler import register_job, start_scheduler, stop_scheduler
 
     register_job("loyalty-expiry", 24 * 60 * 60, expire_stale_points)
+    register_job("cart-recovery",  15 * 60,      send_cart_recovery_reminders)
     _jobs = start_scheduler()
+    if not _settings.CART_RECOVERY_ENABLED:
+        print("STARTUP: cart recovery is in DRY RUN — set CART_RECOVERY_ENABLED=true to send.")
 
     yield
 
@@ -663,6 +668,7 @@ app.include_router(recipes_router)
 app.include_router(shared_carts_router)
 app.include_router(admin_drivers_router)
 app.include_router(livreur_router)
+app.include_router(cart_sessions_router)
 
 
 # ===========================================================================
