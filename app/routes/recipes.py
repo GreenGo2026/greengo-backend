@@ -41,7 +41,8 @@ INITIAL_RECIPES: list[dict[str, Any]] = [
             {"name_fr": "Courgettes", "quantity": 3, "unit": "pièce", "optional": False, "note_fr": None},
             {"name_fr": "Navets", "quantity": 2, "unit": "pièce", "optional": False, "note_fr": None},
             {"name_fr": "Tomates", "quantity": 3, "unit": "pièce", "optional": False, "note_fr": None},
-            {"name_fr": "Oignons", "quantity": 2, "unit": "pièce", "optional": False, "note_fr": None},
+            {"name_fr": "Oignons", "quantity": 2, "unit": "pièce", "optional": False, "note_fr": None,
+             "aliases": ["Oignon jaune", "Oignon rouge"]},
             {"name_fr": "Pois chiches", "quantity": 200, "unit": "g", "optional": False,
              "note_fr": "Disponible en épicerie locale", "not_in_catalog": True},
             {"name_fr": "Semoule", "quantity": 500, "unit": "g", "optional": False,
@@ -63,11 +64,14 @@ INITIAL_RECIPES: list[dict[str, Any]] = [
         "visible": True,
         "ingredients": [
             {"name_fr": "Poulet entier", "quantity": 1, "unit": "pièce", "optional": False, "note_fr": None},
-            {"name_fr": "Olives", "quantity": 200, "unit": "g", "optional": False, "note_fr": None},
+            {"name_fr": "Olives", "quantity": 200, "unit": "g", "optional": False, "note_fr": None,
+             "aliases": ["Olives noires"]},
             {"name_fr": "Citron", "quantity": 2, "unit": "pièce", "optional": False, "note_fr": "Citron beldi de préférence"},
-            {"name_fr": "Oignons", "quantity": 2, "unit": "pièce", "optional": False, "note_fr": None},
+            {"name_fr": "Oignons", "quantity": 2, "unit": "pièce", "optional": False, "note_fr": None,
+             "aliases": ["Oignon jaune", "Oignon rouge"]},
             {"name_fr": "Ail", "quantity": 4, "unit": "pièce", "optional": False, "note_fr": None},
-            {"name_fr": "Huile d'olive", "quantity": 1, "unit": "pièce", "optional": False, "note_fr": None},
+            {"name_fr": "Huile d'olive", "quantity": 1, "unit": "pièce", "optional": False, "note_fr": None,
+             "aliases": ["Huile d'olive vierge"]},
         ],
     },
     {
@@ -85,8 +89,10 @@ INITIAL_RECIPES: list[dict[str, Any]] = [
         "visible": True,
         "ingredients": [
             {"name_fr": "Poulet entier", "quantity": 1, "unit": "pièce", "optional": False, "note_fr": None},
-            {"name_fr": "Oignons", "quantity": 3, "unit": "pièce", "optional": False, "note_fr": None},
-            {"name_fr": "Huile d'olive", "quantity": 1, "unit": "pièce", "optional": False, "note_fr": None},
+            {"name_fr": "Oignons", "quantity": 3, "unit": "pièce", "optional": False, "note_fr": None,
+             "aliases": ["Oignon jaune", "Oignon rouge"]},
+            {"name_fr": "Huile d'olive", "quantity": 1, "unit": "pièce", "optional": False, "note_fr": None,
+             "aliases": ["Huile d'olive vierge"]},
             {"name_fr": "Lentilles", "quantity": 300, "unit": "g", "optional": False,
              "note_fr": "Disponible en épicerie locale", "not_in_catalog": True},
         ],
@@ -107,8 +113,10 @@ INITIAL_RECIPES: list[dict[str, Any]] = [
         "ingredients": [
             {"name_fr": "Tomates", "quantity": 4, "unit": "pièce", "optional": False, "note_fr": None},
             {"name_fr": "Concombres", "quantity": 2, "unit": "pièce", "optional": False, "note_fr": None},
-            {"name_fr": "Poivrons", "quantity": 2, "unit": "pièce", "optional": False, "note_fr": None},
-            {"name_fr": "Oignons", "quantity": 1, "unit": "pièce", "optional": False, "note_fr": None},
+            {"name_fr": "Poivrons", "quantity": 2, "unit": "pièce", "optional": False, "note_fr": None,
+             "aliases": ["Poivron vert", "Poivron rouge", "Poivron dragon"]},
+            {"name_fr": "Oignons", "quantity": 1, "unit": "pièce", "optional": False, "note_fr": None,
+             "aliases": ["Oignon jaune", "Oignon rouge"]},
             {"name_fr": "Citron", "quantity": 2, "unit": "pièce", "optional": False, "note_fr": None},
             {"name_fr": "Persil", "quantity": 1, "unit": "pièce", "optional": False, "note_fr": None},
         ],
@@ -118,17 +126,39 @@ INITIAL_RECIPES: list[dict[str, Any]] = [
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _match_product(ingredient_name: str, products: list[dict[str, Any]]) -> dict[str, Any] | None:
+def _normalize(text: str) -> str:
+    """Lowercase, straighten apostrophes, strip diacritics. Lets 'Huile
+    d'olive' match 'Huile d'olive vierge' despite the curly apostrophe, and
+    accented product names match unaccented ingredient names."""
+    text = (text or "").replace("’", "'").replace("ʼ", "'")
+    nfd = unicodedata.normalize("NFD", text)
+    without_marks = "".join(c for c in nfd if unicodedata.category(c) != "Mn")
+    return without_marks.lower().strip()
+
+
+def _match_product(
+    ingredient_name: str,
+    products: list[dict[str, Any]],
+    aliases: list[str] | None = None,
+) -> dict[str, Any] | None:
     """Find the best-matching catalog product for an ingredient name.
-    Simple substring/word-overlap scoring -- good enough for a fixed,
-    admin-curated ingredient list, no need for the frontend's fuzzy
-    search-scoring logic here."""
-    name_lower = ingredient_name.lower()
+
+    An exact (normalized) match against an admin-curated alias wins outright --
+    that's how plural ingredient names ('Oignons') reach singular, qualified
+    products ('Oignon rouge'). Falls back to substring/word-overlap scoring
+    for everything without an alias."""
+    for alias in aliases or []:
+        alias_norm = _normalize(alias)
+        for p in products:
+            if _normalize(p.get("name_fr") or "") == alias_norm:
+                return p
+
+    name_lower = _normalize(ingredient_name)
     best: dict[str, Any] | None = None
     best_score = 0
 
     for p in products:
-        p_name = (p.get("name_fr") or "").lower()
+        p_name = _normalize(p.get("name_fr") or "")
         if not p_name:
             continue
 
@@ -160,10 +190,14 @@ def _serialize_recipe(recipe: dict[str, Any], products: list[dict[str, Any]] | N
             "note_fr":        ing.get("note_fr"),
             "not_in_catalog": ing.get("not_in_catalog", False),
             "product":        None,
+            # True once matching has run and found nothing -- distinct from
+            # not_in_catalog (deliberately excluded) so the frontend can show
+            # "no match" separately from "buy at your local grocer".
+            "unmatched":      False,
         }
 
         if products is not None and not ing.get("not_in_catalog"):
-            matched = _match_product(ing["name_fr"], products)
+            matched = _match_product(ing["name_fr"], products, ing.get("aliases"))
             if matched:
                 item["product"] = {
                     "id":         str(matched["_id"]),
@@ -174,13 +208,15 @@ def _serialize_recipe(recipe: dict[str, Any], products: list[dict[str, Any]] | N
                     "image_url":  matched.get("image_url"),
                     "in_stock":   matched.get("in_stock", True),
                 }
+            else:
+                item["unmatched"] = True
 
         ingredients_out.append(item)
 
     total_price = sum(
         (i["product"]["price_mad"] or 0)
         for i in ingredients_out
-        if i["product"] and not i.get("not_in_catalog")
+        if i["product"] and i["product"].get("in_stock") and not i.get("not_in_catalog")
     )
 
     return {
@@ -194,14 +230,20 @@ def _serialize_recipe(recipe: dict[str, Any], products: list[dict[str, Any]] | N
         "cook_time_min":        recipe.get("cook_time_min", 0),
         "ingredients":          ingredients_out,
         "estimated_price_mad":  round(total_price, 2),
-        "ingredients_available": sum(1 for i in ingredients_out if i["product"]),
+        "ingredients_available": sum(
+            1 for i in ingredients_out
+            if i["product"] and i["product"].get("in_stock")
+        ),
         "ingredients_total":    len(ingredients_out),
     }
 
 
 async def _live_products() -> list[dict[str, Any]]:
+    # No stock filter: an out-of-stock catalog item must still resolve to a
+    # match (shown as "temporarily unavailable"), which is a different state
+    # from an ingredient GreenGo doesn't carry at all.
     return await products_col().find(
-        {"in_stock": {"$ne": False}},
+        {},
         {"name_fr": 1, "name_ar": 1, "price_mad": 1, "unit": 1, "image_url": 1, "in_stock": 1},
     ).to_list(500)
 
@@ -251,17 +293,39 @@ async def get_recipe(slug: str) -> dict[str, Any]:
 
 
 @router.post("/seed", summary="Admin: seed the initial recipes into the database (idempotent)")
-async def seed_recipes(_: None = Depends(require_admin)) -> dict[str, Any]:
+async def seed_recipes(
+    refresh_ingredients: bool = False,
+    _: None = Depends(require_admin),
+) -> dict[str, Any]:
+    """Insert any missing seed recipes.
+
+    With ?refresh_ingredients=true, also re-sync the `ingredients` array of
+    recipes that already exist -- needed after the seed ingredient list gains
+    aliases/fields. Only `ingredients` is overwritten; admin-edited name,
+    description, visibility etc. are left untouched.
+    """
     col = recipes_col()
-    seeded = 0
+    seeded = refreshed = 0
     for recipe in INITIAL_RECIPES:
         existing = await col.find_one({"slug": recipe["slug"]})
         if not existing:
             now = datetime.now(tz=timezone.utc)
             await col.insert_one({**recipe, "created_at": now, "updated_at": now})
             seeded += 1
+        elif refresh_ingredients:
+            await col.update_one(
+                {"_id": existing["_id"]},
+                {"$set": {"ingredients": recipe["ingredients"],
+                          "updated_at": datetime.now(tz=timezone.utc)}},
+            )
+            refreshed += 1
 
-    return {"seeded": seeded, "total": len(INITIAL_RECIPES), "message": f"{seeded} recettes ajoutées"}
+    return {
+        "seeded": seeded,
+        "refreshed": refreshed,
+        "total": len(INITIAL_RECIPES),
+        "message": f"{seeded} recettes ajoutées, {refreshed} mises à jour",
+    }
 
 
 # ── Admin CRUD ──────────────────────────────────────────────────────────────────
@@ -273,6 +337,9 @@ class IngredientInput(BaseModel):
     optional: bool = False
     note_fr: str | None = None
     not_in_catalog: bool = False
+    # Exact catalog product names to try before fuzzy matching -- covers
+    # plural ingredient names and qualified products ("Oignons" -> "Oignon rouge").
+    aliases: list[str] = []
 
 
 class RecipeInput(BaseModel):
