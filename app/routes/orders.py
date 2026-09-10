@@ -94,13 +94,13 @@ class OrderResponse(BaseModel):
     points_discount_applied: float = 0.0
 
 class AssignDriverPayload(BaseModel):
-    driver_name: str
-    driver_phone: str
-    # Optional link to a registered driver in the drivers collection. When
-    # present it sets assigned_livreur_id, which is what the livreur portal
-    # filters its delivery list on. Left optional so the existing free-text
-    # assignment (a one-off driver with no portal account) keeps working.
+    # All optional. driver_id present -> assign a registered driver (sets
+    # assigned_livreur_id, which the livreur portal filters its delivery list
+    # on). driver_id absent but a name given -> one-off free-text assignment,
+    # no portal account. Everything empty/None -> unassign.
     driver_id: str | None = None
+    driver_name: str = ""
+    driver_phone: str = ""
 
 class OrderStatusUpdate(BaseModel):
     status: str
@@ -872,14 +872,36 @@ async def assign_driver(
     payload: AssignDriverPayload,
     _: None = Depends(require_admin),
 ) -> dict[str, Any]:
+    from app.database import drivers_col
+
     col = orders_col()
-    updates: dict[str, Any] = {
-        "driver_name":  payload.driver_name.strip(),
-        "driver_phone": payload.driver_phone.strip(),
-        "updated_at":   datetime.now(tz=timezone.utc),
-    }
-    if payload.driver_id:
-        updates["assigned_livreur_id"] = payload.driver_id.strip()
+    driver_id = (payload.driver_id or "").strip()
+
+    if driver_id:
+        try:
+            driver = await drivers_col().find_one(
+                {"_id": ObjectId(driver_id), "active": True}, {"name": 1, "phone": 1}
+            )
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid driver ID")
+        if not driver:
+            raise HTTPException(status_code=400, detail="Driver not found or inactive")
+        updates: dict[str, Any] = {
+            "assigned_livreur_id": driver_id,
+            "driver_name":  payload.driver_name.strip() or str(driver.get("name") or ""),
+            "driver_phone": payload.driver_phone.strip() or str(driver.get("phone") or ""),
+        }
+    elif payload.driver_name.strip():
+        # One-off free-text assignment -- no portal account, no assigned_livreur_id.
+        updates = {
+            "driver_name":  payload.driver_name.strip(),
+            "driver_phone": payload.driver_phone.strip(),
+        }
+    else:
+        # Unassign.
+        updates = {"assigned_livreur_id": None, "driver_name": "", "driver_phone": ""}
+
+    updates["updated_at"] = datetime.now(tz=timezone.utc)
 
     try:
         result = await col.update_one({"_id": ObjectId(order_id)}, {"$set": updates})
@@ -888,9 +910,10 @@ async def assign_driver(
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail=f"Order {order_id} not found")
     return {
-        "order_id":     order_id,
-        "driver_name":  payload.driver_name.strip(),
-        "driver_phone": payload.driver_phone.strip(),
+        "order_id":            order_id,
+        "assigned":            bool(driver_id),
+        "driver_name":         updates.get("driver_name", ""),
+        "driver_phone":        updates.get("driver_phone", ""),
         "assigned_livreur_id": updates.get("assigned_livreur_id"),
     }
 
