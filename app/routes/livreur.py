@@ -24,12 +24,14 @@ requirement -- do not relax the sub check in either place.
 """
 from __future__ import annotations
 
+import asyncio
 import os
 import re
+import secrets
 import time
 from collections import defaultdict
 from datetime import datetime, time as dtime, timedelta, timezone
-from typing import Any
+from typing import Any, Literal
 
 import bcrypt
 import jwt as pyjwt
@@ -41,6 +43,7 @@ from pydantic import BaseModel, Field
 
 from app.auth import require_admin
 from app.database import drivers_col, orders_col
+from app.services.whatsapp import send_whatsapp_message
 
 admin_drivers_router = APIRouter(prefix="/api/v1/admin/drivers", tags=["Admin - Drivers"])
 livreur_router       = APIRouter(prefix="/api/v1/livreur",       tags=["Livreur"])
@@ -72,6 +75,24 @@ _PIN_SOFT_WINDOW = int(os.getenv("LIVREUR_PIN_SOFT_WINDOW", "300"))    # 5 min
 _PIN_HARD_LIMIT  = int(os.getenv("LIVREUR_PIN_HARD_LIMIT",  "12"))
 _PIN_HARD_WINDOW = int(os.getenv("LIVREUR_PIN_HARD_WINDOW", "3600"))   # 1 h
 _PIN_BAN_SECONDS = int(os.getenv("LIVREUR_PIN_BAN_SECONDS", "3600"))   # 1 h
+
+# ── Self-registration rate limiting ───────────────────────────────────────────
+# POST /livreur/register is public and writes a DB row an admin later acts on;
+# an unbounded endpoint is an abuse vector (spam pending requests). Light cap.
+_REG_LIMIT   = int(os.getenv("LIVREUR_REG_LIMIT",  "3"))
+_REG_WINDOW  = int(os.getenv("LIVREUR_REG_WINDOW", "3600"))   # 1 h
+_REG_ATTEMPTS: dict[str, list[float]] = defaultdict(list)
+
+
+def _check_register_rate_limit(ip: str) -> None:
+    now = time.time()
+    _REG_ATTEMPTS[ip] = [t for t in _REG_ATTEMPTS[ip] if now - t < _REG_WINDOW]
+    if len(_REG_ATTEMPTS[ip]) >= _REG_LIMIT:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Trop de demandes. Réessayez dans une heure.",
+        )
+    _REG_ATTEMPTS[ip].append(now)
 
 _PIN_FAILURES: dict[str, list[float]] = defaultdict(list)
 _PIN_BANNED:   dict[str, float]       = {}
@@ -227,24 +248,74 @@ class LivreurAuthPayload(BaseModel):
     pin: str
 
 
+class DriverRegistrationRequest(BaseModel):
+    name:         str = Field(min_length=2, max_length=80)
+    phone:        str = Field(min_length=6, max_length=20)
+    vehicle_type: Literal["moto", "vélo", "voiture"]
+    cin:          str = Field(min_length=4, max_length=20)
+
+
 # ── Admin: driver management ──────────────────────────────────────────────────
 
+def _mask_cin(cin: str) -> str:
+    """Last 4 digits only. Full CIN is PII -- admin reveals it explicitly."""
+    cin = (cin or "").strip()
+    if len(cin) < 4:
+        return "••••"
+    return "•" * (len(cin) - 4) + cin[-4:]
+
+
 def _driver_public(doc: dict[str, Any]) -> dict[str, Any]:
-    """Never leaks pin_hash."""
+    """Never leaks pin_hash. CIN is masked -- full value only via the
+    dedicated reveal endpoint."""
     return {
-        "id":         str(doc["_id"]),
-        "name":       doc.get("name") or "",
-        "phone":      doc.get("phone") or "",
-        "active":     bool(doc.get("active", False)),
-        "created_at": (doc["created_at"].isoformat()
-                       if isinstance(doc.get("created_at"), datetime) else None),
+        "id":           str(doc["_id"]),
+        "name":         doc.get("name") or "",
+        "phone":        doc.get("phone") or "",
+        "active":       bool(doc.get("active", False)),
+        # Legacy docs predate the status field -- an existing driver is active.
+        "status":       doc.get("status") or ("active" if doc.get("active") else "inactive"),
+        "vehicle_type": doc.get("vehicle_type") or "",
+        "cin_masked":   _mask_cin(doc.get("cin") or ""),
+        "created_at":   (doc["created_at"].isoformat()
+                         if isinstance(doc.get("created_at"), datetime) else None),
+        "activated_at": (doc["activated_at"].isoformat()
+                         if isinstance(doc.get("activated_at"), datetime) else None),
     }
 
 
 @admin_drivers_router.get("", summary="List drivers")
-async def list_drivers(_: None = Depends(require_admin)) -> list[dict[str, Any]]:
-    docs = await drivers_col().find({}).sort("created_at", -1).to_list(length=200)
+async def list_drivers(
+    status: Literal["pending", "active", "inactive", "rejected"] | None = None,
+    _: None = Depends(require_admin),
+) -> list[dict[str, Any]]:
+    query: dict[str, Any] = {}
+    if status == "active":
+        # Legacy docs (no status field) are active if their flag is set.
+        query = {"$or": [{"status": "active"}, {"status": {"$exists": False}, "active": True}]}
+    elif status == "inactive":
+        query = {"$or": [{"status": "inactive"},
+                         {"status": {"$exists": False}, "active": {"$ne": True}}]}
+    elif status is not None:
+        query = {"status": status}
+
+    docs = await drivers_col().find(query).sort("created_at", -1).to_list(length=200)
     return [_driver_public(d) for d in docs]
+
+
+@admin_drivers_router.get("/{driver_id}/cin", summary="Reveal a driver's full CIN")
+async def reveal_driver_cin(
+    driver_id: str,
+    _: None = Depends(require_admin),
+) -> dict[str, Any]:
+    try:
+        oid = ObjectId(driver_id)
+    except (InvalidId, TypeError):
+        raise HTTPException(status_code=400, detail="Identifiant livreur invalide.")
+    doc = await drivers_col().find_one({"_id": oid}, {"cin": 1})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Livreur introuvable.")
+    return {"cin": doc.get("cin") or ""}
 
 
 @admin_drivers_router.post("", status_code=201, summary="Create a driver")
@@ -299,6 +370,8 @@ async def update_driver(
     updates: dict[str, Any] = {"updated_at": datetime.now(tz=timezone.utc)}
     if payload.active is not None:
         updates["active"] = payload.active
+        # Keep status in step so the ?status= filter and the admin UI agree.
+        updates["status"] = "active" if payload.active else "inactive"
     if payload.name is not None:
         updates["name"] = payload.name.strip()
     if payload.pin is not None:
@@ -318,6 +391,91 @@ async def update_driver(
     if not doc:
         raise HTTPException(status_code=404, detail="Livreur introuvable.")
     return _driver_public(doc)
+
+
+@admin_drivers_router.post("/{driver_id}/validate", summary="Approve a pending driver: issue a PIN and WhatsApp it")
+async def validate_driver(
+    driver_id: str,
+    _: None = Depends(require_admin),
+) -> dict[str, Any]:
+    col = drivers_col()
+    try:
+        oid = ObjectId(driver_id)
+    except (InvalidId, TypeError):
+        raise HTTPException(status_code=400, detail="Identifiant livreur invalide.")
+
+    driver = await col.find_one({"_id": oid})
+    if not driver:
+        raise HTTPException(status_code=404, detail="Livreur introuvable.")
+    if driver.get("status") == "active" or driver.get("active"):
+        # Idempotency guard: a double-click must not mint a second PIN and
+        # send a second WhatsApp. The first PIN is already gone (only its hash
+        # is stored), so there's nothing to return -- the admin re-issues via
+        # the PATCH pin endpoint if the driver never got it.
+        raise HTTPException(status_code=409, detail="Ce livreur est déjà actif.")
+
+    # 6-digit PIN, regenerated on the (rare) collision with an active driver.
+    pin = ""
+    for _attempt in range(10):
+        candidate = str(secrets.randbelow(900_000) + 100_000)
+        clash = False
+        async for other in col.find({"active": True}, {"pin_hash": 1}):
+            if verify_pin(candidate, other.get("pin_hash") or ""):
+                clash = True
+                break
+        if not clash:
+            pin = candidate
+            break
+    if not pin:
+        raise HTTPException(status_code=500, detail="Impossible de générer un PIN unique. Réessayez.")
+
+    now = datetime.now(tz=timezone.utc)
+    await col.update_one(
+        {"_id": oid},
+        {"$set": {
+            "active":       True,
+            "status":       "active",
+            "pin_hash":     hash_pin(pin),
+            "activated_at": now,
+            "updated_at":   now,
+        }},
+    )
+
+    message = (
+        f"مرحباً {driver.get('name') or ''} 👋\n\n"
+        f"تم قبول طلبك كسائق في GreenGo Market ✅\n\n"
+        f"🔐 كود PIN الخاص بك: *{pin}*\n"
+        f"🔗 بوابة التوصيل: https://www.mygreengoo.com/livreur\n\n"
+        f"لا تشارك هذا الكود مع أحد."
+    )
+    # send_whatsapp_message is sync (requests) -- keep it off the event loop.
+    wa_sent = await asyncio.to_thread(send_whatsapp_message, driver.get("phone") or "", message)
+
+    return {
+        "validated":     True,
+        "driver_name":   driver.get("name") or "",
+        "pin":           pin,          # manual fallback if WhatsApp failed
+        "whatsapp_sent": bool(wa_sent),
+    }
+
+
+@admin_drivers_router.patch("/{driver_id}/reject", summary="Reject a pending driver")
+async def reject_driver(
+    driver_id: str,
+    _: None = Depends(require_admin),
+) -> dict[str, Any]:
+    try:
+        oid = ObjectId(driver_id)
+    except (InvalidId, TypeError):
+        raise HTTPException(status_code=400, detail="Identifiant livreur invalide.")
+    result = await drivers_col().update_one(
+        {"_id": oid},
+        {"$set": {"status": "rejected", "active": False,
+                  "updated_at": datetime.now(tz=timezone.utc)}},
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Livreur introuvable.")
+    return {"rejected": True}
 
 
 # ── Livreur: authentication ───────────────────────────────────────────────────
@@ -355,6 +513,42 @@ async def livreur_auth(payload: LivreurAuthPayload, request: Request) -> dict[st
         "name":         name,
         "role":         "livreur",
     }
+
+
+# ── Livreur: self-registration ───────────────────────────────────────────────
+
+@livreur_router.post("/register", summary="Driver self-registration (public, admin approval required)")
+async def register_driver(payload: DriverRegistrationRequest, request: Request) -> dict[str, Any]:
+    _check_register_rate_limit(_client_ip(request))
+
+    col   = drivers_col()
+    phone = payload.phone.strip()
+
+    existing = await col.find_one(
+        {"phone": phone, "status": {"$in": ["pending", "active"]}}, {"_id": 1}
+    )
+    # A legacy admin-created driver has no status field but is active.
+    if not existing:
+        existing = await col.find_one(
+            {"phone": phone, "status": {"$exists": False}, "active": True}, {"_id": 1}
+        )
+    if existing:
+        raise HTTPException(status_code=409, detail="Ce numéro est déjà enregistré.")
+
+    now = datetime.now(tz=timezone.utc)
+    await col.insert_one({
+        "name":             payload.name.strip(),
+        "phone":            phone,
+        "vehicle_type":     payload.vehicle_type,
+        "cin":              payload.cin.strip(),
+        "status":           "pending",
+        "active":           False,
+        "pin_hash":         None,
+        "created_by_admin": False,
+        "created_at":       now,
+        "updated_at":       now,
+    })
+    return {"message": "Demande envoyée. Votre PIN vous sera envoyé par WhatsApp après validation."}
 
 
 # ── Livreur: deliveries ───────────────────────────────────────────────────────
