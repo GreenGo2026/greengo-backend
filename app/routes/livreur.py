@@ -547,6 +547,135 @@ async def register_driver(payload: DriverRegistrationRequest, request: Request) 
     return {"message": "Demande envoyée. Votre PIN vous sera envoyé par WhatsApp après validation."}
 
 
+# ── Livreur: order dispatch (pool + claim) ───────────────────────────────────
+
+def _fmt_dt(v: Any) -> str:
+    return v.isoformat() if isinstance(v, datetime) else (str(v) if v else "")
+
+
+def _serialize_order_for_driver(doc: dict[str, Any]) -> dict[str, Any]:
+    """Order shape the driver portal consumes. Scoped to livreur routes --
+    not a general order serializer (there isn't one; orders.py builds dicts
+    inline)."""
+    return {
+        "id":                  str(doc["_id"]),
+        "customer_name":       doc.get("customer_name", ""),
+        "customer_phone":      doc.get("customer_phone") or doc.get("phone", ""),
+        "address":             doc.get("address") or doc.get("delivery_address", ""),
+        "gps_coordinates":     doc.get("gps_coordinates"),
+        "items":               doc.get("items", []),
+        "total_price":         doc.get("total_price", 0),
+        "driver_payout_mad":   doc.get("driver_payout_mad", 15.0),
+        "status":              doc.get("status", "Pending"),
+        "assigned_at":         _fmt_dt(doc.get("assigned_at")),
+        "ready_at":            _fmt_dt(doc.get("ready_at")),
+        "delivering_at":       _fmt_dt(doc.get("delivering_at")),
+        "created_at":          _fmt_dt(doc.get("created_at")),
+        "assigned_livreur_id": doc.get("assigned_livreur_id"),
+    }
+
+
+_POOL_QUERY: dict[str, Any] = {
+    "status": {"$in": ["Pending", "Confirmed"]},
+    "$or": [
+        {"assigned_livreur_id": None},
+        {"assigned_livreur_id": {"$exists": False}},
+    ],
+}
+
+
+@livreur_router.get("/orders/available", summary="Unclaimed orders any available driver can take")
+async def livreur_available_orders(
+    _: LivreurIdentity = Depends(require_livreur),
+) -> list[dict[str, Any]]:
+    docs = await orders_col().find(_POOL_QUERY).sort("created_at", 1).to_list(length=50)
+    return [_serialize_order_for_driver(d) for d in docs]
+
+
+@livreur_router.get("/orders/my", summary="This driver's orders, by tab")
+async def livreur_my_orders(
+    tab: str = "processing",
+    identity: LivreurIdentity = Depends(require_livreur),
+) -> list[dict[str, Any]]:
+    tab_map = {
+        "processing": ["Assigned", "Ready", "Out for Delivery", "Pending Confirmation"],
+        "delivered":  ["Delivered", "Completed"],
+    }
+    statuses = tab_map.get(tab, tab_map["processing"])
+    docs = await orders_col().find(
+        {"assigned_livreur_id": identity.driver_id, "status": {"$in": statuses}}
+    ).sort("created_at", -1).to_list(length=100)
+    return [_serialize_order_for_driver(d) for d in docs]
+
+
+@livreur_router.post("/orders/{order_id}/claim", summary="Claim an unassigned order from the pool")
+async def livreur_claim_order(
+    order_id: str,
+    identity: LivreurIdentity = Depends(require_livreur),
+) -> dict[str, Any]:
+    try:
+        oid = ObjectId(order_id)
+    except (InvalidId, TypeError):
+        raise HTTPException(status_code=400, detail="Identifiant de commande invalide.")
+
+    now = datetime.now(tz=timezone.utc)
+    result = await orders_col().find_one_and_update(
+        {"_id": oid, **_POOL_QUERY},
+        {
+            "$set": {
+                "status":                "Assigned",
+                "assigned_livreur_id":   identity.driver_id,
+                "assigned_livreur_name": identity.name,
+                "driver_name":           identity.name,
+                "assigned_at":           now,
+                "updated_at":            now,
+            },
+            "$push": {"status_history": {
+                "from": "Pending", "to": "Assigned",
+                "timestamp": now, "changed_by": identity.driver_id, "note": "Pris par livreur",
+            }},
+        },
+        return_document=True,
+    )
+    if result is None:
+        raise HTTPException(status_code=409, detail="Cette commande a déjà été prise par un autre livreur.")
+    return {"claimed": True, "order_id": order_id, "status": "Assigned"}
+
+
+@livreur_router.patch("/orders/{order_id}/picking-up", summary="Driver is en route with the order")
+async def livreur_picking_up(
+    order_id: str,
+    identity: LivreurIdentity = Depends(require_livreur),
+) -> dict[str, Any]:
+    try:
+        oid = ObjectId(order_id)
+    except (InvalidId, TypeError):
+        raise HTTPException(status_code=400, detail="Identifiant de commande invalide.")
+
+    now = datetime.now(tz=timezone.utc)
+    result = await orders_col().find_one_and_update(
+        {
+            "_id": oid,
+            "assigned_livreur_id": identity.driver_id,
+            "status": {"$in": ["Assigned", "Ready"]},
+        },
+        {
+            "$set": {"status": "Out for Delivery", "delivering_at": now, "updated_at": now},
+            "$push": {"status_history": {
+                "from": "Ready", "to": "Out for Delivery",
+                "timestamp": now, "changed_by": identity.driver_id, "note": "En route",
+            }},
+        },
+        return_document=True,
+    )
+    if result is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Commande introuvable, non autorisée, ou statut incompatible.",
+        )
+    return {"status": "Out for Delivery", "order_id": order_id}
+
+
 # ── Livreur: deliveries ───────────────────────────────────────────────────────
 
 _OPEN_STATUSES_EXCLUDED = ["Completed", "Cancelled"]

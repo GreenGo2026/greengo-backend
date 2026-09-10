@@ -40,9 +40,15 @@ DEFAULT_DELIVERY_ZONE = "sale"
 # this brings the same transition enforcement server-side for orders_col(),
 # which previously accepted any status string with no validation at all.
 STATUS_TRANSITIONS: dict[str, list[str]] = {
-    "Pending":          ["Confirmed", "Cancelled"],
-    "Confirmed":        ["Preparing", "Cancelled"],
-    "Preparing":        ["Out for Delivery", "Cancelled"],
+    "Pending":          ["Confirmed", "Assigned", "Cancelled"],
+    # "Assigned" == a driver self-claimed the order from the available pool.
+    # Displayed like "Confirmed" in the admin UI; kept distinct so dispatch
+    # can tell admin-assigned from driver-claimed.
+    "Assigned":         ["Ready", "Preparing", "Cancelled"],
+    "Confirmed":        ["Preparing", "Ready", "Cancelled"],
+    "Preparing":        ["Ready", "Cancelled"],
+    # "Ready" == staff marked the basket packed and waiting for pickup.
+    "Ready":            ["Out for Delivery", "Cancelled"],
     # A driver marking a delivery done lands on "Pending Confirmation", not
     # "Delivered" -- only an admin closes an order out. "Delivered" stays
     # reachable directly so an admin can still complete a delivery the driver
@@ -634,6 +640,8 @@ async def update_order_status(
         "pending":          "Pending",
         "confirmed":        "Confirmed",
         "preparing":        "Preparing",
+        "assigned":         "Assigned",
+        "ready":            "Ready",
         "out_for_delivery": "Out for Delivery",
         "out for delivery": "Out for Delivery",
         "delivered":        "Delivered",
@@ -901,21 +909,74 @@ async def assign_driver(
         # Unassign.
         updates = {"assigned_livreur_id": None, "driver_name": "", "driver_phone": ""}
 
-    updates["updated_at"] = datetime.now(tz=timezone.utc)
+    now = datetime.now(tz=timezone.utc)
+    updates["updated_at"] = now
 
     try:
-        result = await col.update_one({"_id": ObjectId(order_id)}, {"$set": updates})
+        # return_document=False -> the pre-update doc, so we can see the status
+        # before this call touched it.
+        prev = await col.find_one_and_update(
+            {"_id": ObjectId(order_id)}, {"$set": updates}, return_document=False
+        )
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid order ID")
-    if result.matched_count == 0:
+    if prev is None:
         raise HTTPException(status_code=404, detail=f"Order {order_id} not found")
+
+    # Assigning a registered driver to an order that hasn't started yet advances
+    # it to "Assigned" so it shows up in that driver's Processing tab right away
+    # (the /orders/my query filters on Assigned+; a still-"Pending" order would
+    # be invisible to them).
+    final_status = prev.get("status")
+    if driver_id and prev.get("status") in ("Pending", "Confirmed"):
+        final_status = "Assigned"
+        await col.update_one(
+            {"_id": ObjectId(order_id)},
+            {
+                "$set": {"status": "Assigned", "assigned_at": now, "updated_at": now},
+                "$push": {"status_history": {
+                    "from": prev.get("status"), "to": "Assigned",
+                    "timestamp": now, "changed_by": "admin",
+                    "note": "Assigné via tableau de bord",
+                }},
+            },
+        )
+
     return {
         "order_id":            order_id,
         "assigned":            bool(driver_id),
+        "status":              final_status,
         "driver_name":         updates.get("driver_name", ""),
         "driver_phone":        updates.get("driver_phone", ""),
         "assigned_livreur_id": updates.get("assigned_livreur_id"),
     }
+
+
+@router.patch("/{order_id}/ready", summary="Staff marks a basket packed and ready for pickup")
+async def mark_order_ready(
+    order_id: str,
+    _: None = Depends(require_admin),
+) -> dict[str, Any]:
+    now = datetime.now(tz=timezone.utc)
+    try:
+        oid = ObjectId(order_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid order ID")
+
+    result = await orders_col().find_one_and_update(
+        {"_id": oid, "status": {"$in": ["Assigned", "Confirmed", "Preparing"]}},
+        {
+            "$set": {"status": "Ready", "ready_at": now, "updated_at": now},
+            "$push": {"status_history": {
+                "from": None, "to": "Ready",
+                "timestamp": now, "changed_by": "admin", "note": "Panier prêt",
+            }},
+        },
+        return_document=True,
+    )
+    if result is None:
+        raise HTTPException(status_code=404, detail="Commande introuvable ou statut incompatible.")
+    return {"status": "Ready", "order_id": order_id}
 
 
 @router.get("/{order_id}/tracking", summary="Public order tracking — no auth required")
