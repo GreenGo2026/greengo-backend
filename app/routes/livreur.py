@@ -474,6 +474,60 @@ async def reject_driver(
     return {"rejected": True}
 
 
+@admin_drivers_router.post("/{driver_id}/resend-pin", summary="Regenerate and WhatsApp a new driver PIN")
+async def resend_driver_pin(
+    driver_id: str,
+    _: None = Depends(require_admin),
+) -> dict[str, Any]:
+    try:
+        oid = ObjectId(driver_id)
+    except (InvalidId, TypeError):
+        raise HTTPException(status_code=400, detail="Identifiant livreur invalide.")
+
+    driver = await drivers_col().find_one({"_id": oid, "active": True})
+    if not driver:
+        raise HTTPException(status_code=404, detail="Livreur introuvable ou inactif.")
+
+    # Regenerate on collision with another active driver -- same rule as /validate.
+    pin = ""
+    for _attempt in range(10):
+        candidate = str(secrets.randbelow(900_000) + 100_000)
+        clash = False
+        async for other in drivers_col().find(
+            {"active": True, "_id": {"$ne": oid}}, {"pin_hash": 1}
+        ):
+            if verify_pin(candidate, other.get("pin_hash") or ""):
+                clash = True
+                break
+        if not clash:
+            pin = candidate
+            break
+    if not pin:
+        raise HTTPException(status_code=500, detail="Impossible de générer un PIN unique. Réessayez.")
+
+    now = datetime.now(tz=timezone.utc)
+    await drivers_col().update_one(
+        {"_id": oid},
+        {"$set": {"pin_hash": hash_pin(pin), "updated_at": now}},
+    )
+
+    message = (
+        f"مرحباً {driver.get('name') or ''} 👋\n\n"
+        f"تم تجديد كود PIN الخاص بك في GreenGo Market ✅\n\n"
+        f"🔐 كود PIN الجديد: *{pin}*\n"
+        f"🔗 بوابة التوصيل: https://www.mygreengoo.com/livreur\n\n"
+        f"لا تشارك هذا الكود مع أحد."
+    )
+    wa_sent = await asyncio.to_thread(send_whatsapp_message, driver.get("phone") or "", message)
+
+    return {
+        "resent":        True,
+        "driver_name":   driver.get("name") or "",
+        "pin":           pin,
+        "whatsapp_sent": bool(wa_sent),
+    }
+
+
 # ── Livreur: authentication ───────────────────────────────────────────────────
 
 @livreur_router.post("/auth", summary="Driver login by PIN (no username)")
