@@ -798,3 +798,78 @@ async def livreur_mark_delivered(
         raise HTTPException(status_code=409, detail="Statut modifié entre-temps. Rechargez.")
 
     return {"order_id": order_id, "status": "Pending Confirmation", "already_submitted": False}
+
+
+# ── Livreur: availability, profile, earnings, wallet ─────────────────────────
+
+class AvailabilityPayload(BaseModel):
+    is_available: bool
+
+
+async def _driver_doc(identity: LivreurIdentity) -> dict[str, Any]:
+    try:
+        oid = ObjectId(identity.driver_id)
+    except (InvalidId, TypeError):
+        raise HTTPException(status_code=401, detail="Session invalide.")
+    doc = await drivers_col().find_one({"_id": oid})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Livreur introuvable.")
+    return doc
+
+
+@livreur_router.patch("/availability", summary="Driver toggles online/offline")
+async def livreur_set_availability(
+    payload: AvailabilityPayload,
+    identity: LivreurIdentity = Depends(require_livreur),
+) -> dict[str, Any]:
+    await drivers_col().update_one(
+        {"_id": ObjectId(identity.driver_id)},
+        {"$set": {"is_available": payload.is_available,
+                  "updated_at": datetime.now(tz=timezone.utc)}},
+    )
+    return {"is_available": payload.is_available}
+
+
+@livreur_router.get("/profile", summary="Logged-in driver's profile")
+async def livreur_profile(identity: LivreurIdentity = Depends(require_livreur)) -> dict[str, Any]:
+    doc = await _driver_doc(identity)
+    return {
+        **_driver_public(doc),
+        "is_available":   bool(doc.get("is_available", False)),
+        "total_earnings": doc.get("total_earnings", 0.0),
+    }
+
+
+@livreur_router.get("/earnings", summary="Driver earnings summary + daily breakdown")
+async def livreur_earnings(identity: LivreurIdentity = Depends(require_livreur)) -> dict[str, Any]:
+    doc = await _driver_doc(identity)
+    daily: list[dict[str, Any]] = doc.get("daily_earnings", []) or []
+
+    now        = datetime.now(tz=timezone.utc)
+    today      = now.strftime("%Y-%m-%d")
+    week_start = (now - timedelta(days=6)).strftime("%Y-%m-%d")
+
+    today_mad = round(sum(e.get("amount_mad", 0.0) for e in daily if e.get("date") == today), 2)
+    week_mad  = round(sum(e.get("amount_mad", 0.0) for e in daily if e.get("date", "") >= week_start), 2)
+
+    by_date: dict[str, float] = {}
+    for e in daily:
+        d = e.get("date", "")
+        by_date[d] = round(by_date.get(d, 0.0) + e.get("amount_mad", 0.0), 2)
+
+    return {
+        "total_mad": doc.get("total_earnings", 0.0),
+        "today_mad": today_mad,
+        "week_mad":  week_mad,
+        "chart":     [{"date": k, "amount_mad": v} for k, v in sorted(by_date.items())],
+        "recent":    sorted(daily, key=lambda x: x.get("date", ""), reverse=True)[:20],
+    }
+
+
+@livreur_router.get("/wallet", summary="Driver wallet balance")
+async def livreur_wallet(identity: LivreurIdentity = Depends(require_livreur)) -> dict[str, Any]:
+    doc = await _driver_doc(identity)
+    return {
+        "balance_mad":  doc.get("total_earnings", 0.0),
+        "transactions": [],   # withdrawal records land here in a later pass
+    }

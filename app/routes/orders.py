@@ -14,7 +14,7 @@ from fastapi.responses import StreamingResponse
 from app.auth import require_admin
 from app.config import get_settings
 from app.services.pdf_generator import generate_invoice_pdf
-from app.database import orders_col, customers_col, products_col, paniers_col
+from app.database import orders_col, customers_col, products_col, paniers_col, drivers_col
 from app.services.audit import ORDER_TRACKED_FIELDS, _compute_diff, actor_id, log_change, request_ip
 from app.services.notifications import send_and_log, notify_customer_and_log, notify_admin_and_log
 from app.services.whatsapp import build_referral_code_message, build_referral_reward_message
@@ -698,6 +698,30 @@ async def update_order_status(
             "$push": {"status_history": history_entry},
         },
     )
+
+    # Credit the driver when an admin signs off a delivery. Only on the
+    # transition into "Delivered" (current_status guard prevents a repeat
+    # credit if the status is re-submitted), and only if a registered driver
+    # is linked -- a free-text / unassigned order is a no-op skip, never a crash.
+    if final_status == "Delivered" and current_status != "Delivered":
+        livreur_id = order.get("assigned_livreur_id")
+        if livreur_id:
+            fee = order.get("driver_payout_mad", 15.0)
+            try:
+                await drivers_col().update_one(
+                    {"_id": ObjectId(livreur_id)},
+                    {
+                        "$inc": {"total_earnings": fee},
+                        "$push": {"daily_earnings": {
+                            "date":       now.strftime("%Y-%m-%d"),
+                            "amount_mad": fee,
+                            "order_id":   str(order["_id"]),
+                        }},
+                    },
+                )
+            except Exception:
+                # Earnings accounting must never block the status change.
+                pass
 
     # Auto-restock on cancellation. Variant lines (250g/500g/1kg) restock the
     # matching variants[].stock_qty; MongoDB's $inc creates the field at the
