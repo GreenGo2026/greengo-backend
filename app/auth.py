@@ -17,6 +17,22 @@ from fastapi.security import (
 _KEY_HEADER = APIKeyHeader(name="X-Admin-Key", auto_error=False)
 _BEARER     = HTTPBearer(auto_error=False)
 
+
+def client_ip(request: Request) -> str:
+    """Real caller IP. Behind Railway's edge, request.client.host is the proxy
+    -- a single shared value that makes every per-IP rate limiter useless.
+    Trust the leftmost X-Forwarded-For hop (Railway sets it), then X-Real-IP,
+    then the socket peer."""
+    forwarded = request.headers.get("X-Forwarded-For", "")
+    if forwarded:
+        first = forwarded.split(",")[0].strip()
+        if first:
+            return first
+    real_ip = request.headers.get("X-Real-IP", "").strip()
+    if real_ip:
+        return real_ip
+    return request.client.host if request.client else "unknown"
+
 # ── Login brute-force config (override via Railway env vars) ──────────────────
 # Protects POST /admin/auth/login from password-guessing only.
 # API endpoints that fail auth simply return 401 — they do NOT accumulate here.
@@ -127,7 +143,7 @@ async def require_admin(
         from app.services.session_logger import log_admin_session
         await log_admin_session(
             event="failed_attempt",
-            ip=request.client.host if request.client else "unknown",
+            ip=client_ip(request),
             user_agent=request.headers.get("user-agent", ""),
             details=f"{request.method} {request.url.path}",
         )

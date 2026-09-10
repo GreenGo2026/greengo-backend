@@ -41,7 +41,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Security, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
-from app.auth import require_admin
+from app.auth import client_ip as _client_ip, require_admin
 from app.database import drivers_col, orders_col
 from app.services.whatsapp import send_whatsapp_message
 
@@ -96,10 +96,6 @@ def _check_register_rate_limit(ip: str) -> None:
 
 _PIN_FAILURES: dict[str, list[float]] = defaultdict(list)
 _PIN_BANNED:   dict[str, float]       = {}
-
-
-def _client_ip(request: Request) -> str:
-    return request.client.host if request.client else "unknown"
 
 
 def _check_pin_rate_limit(ip: str) -> None:

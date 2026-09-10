@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from passlib.context import CryptContext
 from pydantic import BaseModel
 
-from app.auth import check_login_rate_limit, record_failed_login, require_admin
+from app.auth import check_login_rate_limit, client_ip, record_failed_login, require_admin
 from app.services.session_logger import log_admin_session
 
 logger = logging.getLogger(__name__)
@@ -84,7 +84,7 @@ _COOKIE_MAX_AGE = 28800  # 8 hours
     summary="Admin 2FA login — password + Google Authenticator code",
 )
 async def admin_login(body: LoginRequest, request: Request, response: Response) -> TokenResponse:
-    ip = request.client.host if request.client else "unknown"
+    ip = client_ip(request)
     check_login_rate_limit(ip)
 
     # Validate password via bcrypt
@@ -149,7 +149,7 @@ async def admin_login(body: LoginRequest, request: Request, response: Response) 
 async def admin_logout(request: Request, response: Response) -> dict:
     response.delete_cookie(key=_COOKIE_NAME, path="/", samesite="none", secure=True)
     try:
-        ip = request.client.host if request.client else "unknown"
+        ip = client_ip(request)
         await log_admin_session(event="logout", ip=ip, user_agent=request.headers.get("user-agent", ""))
     except Exception:
         pass
