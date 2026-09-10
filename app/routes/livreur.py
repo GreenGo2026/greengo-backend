@@ -248,7 +248,6 @@ class DriverRegistrationRequest(BaseModel):
     name:         str = Field(min_length=2, max_length=80)
     phone:        str = Field(min_length=6, max_length=20)
     vehicle_type: Literal["moto", "vélo", "voiture"]
-    cin:          str = Field(min_length=4, max_length=20)
 
 
 # ── Admin: driver management ──────────────────────────────────────────────────
@@ -590,7 +589,6 @@ async def register_driver(payload: DriverRegistrationRequest, request: Request) 
         "name":             payload.name.strip(),
         "phone":            phone,
         "vehicle_type":     payload.vehicle_type,
-        "cin":              payload.cin.strip(),
         "status":           "pending",
         "active":           False,
         "pin_hash":         None,
