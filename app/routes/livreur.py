@@ -804,6 +804,8 @@ async def livreur_mark_delivered(
 
 class AvailabilityPayload(BaseModel):
     is_available: bool
+    latitude:     float | None = None
+    longitude:    float | None = None
 
 
 async def _driver_doc(identity: LivreurIdentity) -> dict[str, Any]:
@@ -822,11 +824,21 @@ async def livreur_set_availability(
     payload: AvailabilityPayload,
     identity: LivreurIdentity = Depends(require_livreur),
 ) -> dict[str, Any]:
-    await drivers_col().update_one(
-        {"_id": ObjectId(identity.driver_id)},
-        {"$set": {"is_available": payload.is_available,
-                  "updated_at": datetime.now(tz=timezone.utc)}},
-    )
+    now = datetime.now(tz=timezone.utc)
+    update: dict[str, Any] = {"is_available": payload.is_available, "updated_at": now}
+
+    if payload.is_available and payload.latitude is not None and payload.longitude is not None:
+        # Going online with a fix -- dispatch can route by proximity.
+        update["last_location"] = {
+            "lat": payload.latitude,
+            "lng": payload.longitude,
+            "recorded_at": now,
+        }
+    elif not payload.is_available:
+        # Offline -- a stale location is worse than none.
+        update["last_location"] = None
+
+    await drivers_col().update_one({"_id": ObjectId(identity.driver_id)}, {"$set": update})
     return {"is_available": payload.is_available}
 
 
