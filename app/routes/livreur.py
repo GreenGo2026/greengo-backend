@@ -624,6 +624,9 @@ def _serialize_order_for_driver(doc: dict[str, Any]) -> dict[str, Any]:
         "delivering_at":       _fmt_dt(doc.get("delivering_at")),
         "created_at":          _fmt_dt(doc.get("created_at")),
         "assigned_livreur_id": doc.get("assigned_livreur_id"),
+        # No order doc currently stores a customer note -- default keeps the
+        # rider modal's amber block a safe no-op until that field exists.
+        "notes": doc.get("notes") or doc.get("delivery_notes") or doc.get("customer_note") or "",
     }
 
 
