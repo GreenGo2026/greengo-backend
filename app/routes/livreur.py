@@ -252,17 +252,8 @@ class DriverRegistrationRequest(BaseModel):
 
 # ── Admin: driver management ──────────────────────────────────────────────────
 
-def _mask_cin(cin: str) -> str:
-    """Last 4 digits only. Full CIN is PII -- admin reveals it explicitly."""
-    cin = (cin or "").strip()
-    if len(cin) < 4:
-        return "••••"
-    return "•" * (len(cin) - 4) + cin[-4:]
-
-
 def _driver_public(doc: dict[str, Any]) -> dict[str, Any]:
-    """Never leaks pin_hash. CIN is masked -- full value only via the
-    dedicated reveal endpoint."""
+    """Never leaks pin_hash."""
     return {
         "id":           str(doc["_id"]),
         "name":         doc.get("name") or "",
@@ -271,7 +262,6 @@ def _driver_public(doc: dict[str, Any]) -> dict[str, Any]:
         # Legacy docs predate the status field -- an existing driver is active.
         "status":       doc.get("status") or ("active" if doc.get("active") else "inactive"),
         "vehicle_type": doc.get("vehicle_type") or "",
-        "cin_masked":   _mask_cin(doc.get("cin") or ""),
         "created_at":   (doc["created_at"].isoformat()
                          if isinstance(doc.get("created_at"), datetime) else None),
         "activated_at": (doc["activated_at"].isoformat()
@@ -296,21 +286,6 @@ async def list_drivers(
 
     docs = await drivers_col().find(query).sort("created_at", -1).to_list(length=200)
     return [_driver_public(d) for d in docs]
-
-
-@admin_drivers_router.get("/{driver_id}/cin", summary="Reveal a driver's full CIN")
-async def reveal_driver_cin(
-    driver_id: str,
-    _: None = Depends(require_admin),
-) -> dict[str, Any]:
-    try:
-        oid = ObjectId(driver_id)
-    except (InvalidId, TypeError):
-        raise HTTPException(status_code=400, detail="Identifiant livreur invalide.")
-    doc = await drivers_col().find_one({"_id": oid}, {"cin": 1})
-    if not doc:
-        raise HTTPException(status_code=404, detail="Livreur introuvable.")
-    return {"cin": doc.get("cin") or ""}
 
 
 @admin_drivers_router.post("", status_code=201, summary="Create a driver")
