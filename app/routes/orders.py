@@ -1003,6 +1003,37 @@ async def mark_order_ready(
     return {"status": "Ready", "order_id": order_id}
 
 
+class PayoutUpdatePayload(BaseModel):
+    driver_payout_mad: float = Field(gt=0, le=500, description="Driver commission in MAD (1-500)")
+
+
+@router.patch("/{order_id}/payout", summary="Set driver payout for an order")
+async def update_driver_payout(
+    order_id: str,
+    payload: PayoutUpdatePayload,
+    _: None = Depends(require_admin),
+) -> dict[str, Any]:
+    try:
+        oid = ObjectId(order_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid order ID")
+
+    result = await orders_col().find_one_and_update(
+        {"_id": oid},
+        {"$set": {
+            "driver_payout_mad": payload.driver_payout_mad,
+            "updated_at": datetime.now(tz=timezone.utc),
+        }},
+        return_document=True,
+    )
+    if result is None:
+        raise HTTPException(status_code=404, detail="Order not found.")
+    return {
+        "order_id":          order_id,
+        "driver_payout_mad": payload.driver_payout_mad,
+    }
+
+
 @router.get("/{order_id}/tracking", summary="Public order tracking — no auth required")
 async def track_order(order_id: str) -> dict[str, Any]:
     col = orders_col()
