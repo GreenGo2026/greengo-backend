@@ -115,6 +115,7 @@ def recipes_col()                -> AsyncIOMotorCollection: return _col("recipes
 def shared_carts_col()           -> AsyncIOMotorCollection: return _col("shared_carts")
 def drivers_col()                -> AsyncIOMotorCollection: return _col("drivers")
 def cart_sessions_col()          -> AsyncIOMotorCollection: return _col("cart_sessions")
+def saved_baskets_col()          -> AsyncIOMotorCollection: return _col("saved_baskets")
 
 
 # ---------------------------------------------------------------------------
@@ -207,6 +208,13 @@ async def _init_indexes() -> None:
             # Housekeeping: sessions are worthless after 30 days.
             IndexModel([("created_at", ASCENDING)], expireAfterSeconds=30 * 24 * 3600,
                        name="ttl_cart_session"),
+        ]),
+        ("saved_baskets", saved_baskets_col(), [
+            # A customer's own basket list -- GET /baskets scans this.
+            IndexModel([("phone", ASCENDING)], name="idx_saved_basket_phone"),
+            # Drives the weekly reminder sweep's candidate query.
+            IndexModel([("active", ASCENDING), ("reminder_day", ASCENDING)],
+                       name="idx_saved_basket_reminder"),
         ]),
     ]
 
