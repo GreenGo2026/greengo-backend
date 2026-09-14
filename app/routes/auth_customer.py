@@ -17,7 +17,7 @@ import time
 from datetime import datetime, timedelta, timezone
 
 import jwt
-from fastapi import APIRouter, HTTPException, Security
+from fastapi import APIRouter, Depends, HTTPException, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
@@ -26,6 +26,10 @@ from app.database import customers_col
 from app.services.whatsapp import send_whatsapp_message
 
 router = APIRouter(prefix="/api/v1/customers/auth", tags=["Customer Auth"])
+
+
+def _iso(v) -> str:
+    return v.isoformat() if isinstance(v, datetime) else str(v or "")
 
 _BEARER = HTTPBearer(auto_error=False)
 
@@ -108,13 +112,32 @@ def verify_customer_jwt(token: str) -> str:
 async def require_customer(
     credentials: HTTPAuthorizationCredentials | None = Security(_BEARER),
 ) -> str:
-    """FastAPI dependency for routes that must be logged-in-customer only.
-    Not currently used by any route (Mon Compte reads happen client-side via
-    the token the frontend already holds) -- kept exported for the order-
-    history / profile endpoints this unlocks next."""
+    """FastAPI dependency for routes that must be logged-in-customer only."""
     if not credentials or not credentials.credentials:
         raise HTTPException(status_code=401, detail="Authentification requise.")
     return verify_customer_jwt(credentials.credentials)
+
+
+@router.get("/me", summary="Authenticated customer's own profile")
+async def get_my_profile(phone: str = Depends(require_customer)) -> dict:
+    """Self-serve profile pull for a verified session. Distinct from
+    GET /customers/{phone}/public (which trusts the phone as typed, no proof
+    of ownership) -- this one is keyed off the JWT, not the request."""
+    doc = await customers_col().find_one({"phone": phone})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Profil introuvable.")
+    return {
+        "phone":         doc.get("phone", phone),
+        "name":          doc.get("name", ""),
+        "last_address":  doc.get("last_address", ""),
+        "total_points":  doc.get("total_points", 0),
+        "total_orders":  doc.get("total_orders", 0),
+        "total_spent":   doc.get("total_spent", 0.0),
+        "referral_code": doc.get("referral_code", ""),
+        "segment":       doc.get("segment", ""),
+        "first_order":   _iso(doc.get("first_order")),
+        "last_order":    _iso(doc.get("last_order")),
+    }
 
 
 def _otp_expired(expires_at) -> bool:
