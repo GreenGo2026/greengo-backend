@@ -117,6 +117,7 @@ def drivers_col()                -> AsyncIOMotorCollection: return _col("drivers
 def cart_sessions_col()          -> AsyncIOMotorCollection: return _col("cart_sessions")
 def saved_baskets_col()          -> AsyncIOMotorCollection: return _col("saved_baskets")
 def flash_deals_col()            -> AsyncIOMotorCollection: return _col("flash_deals")
+def bundle_rules_col()           -> AsyncIOMotorCollection: return _col("bundle_rules")
 
 
 # ---------------------------------------------------------------------------
@@ -225,6 +226,12 @@ async def _init_indexes() -> None:
             # product already have an active deal" by this pair.
             IndexModel([("product_name_ar", ASCENDING), ("active", ASCENDING)],
                        name="idx_flash_deals_product_active"),
+        ]),
+        ("bundle_rules", bundle_rules_col(), [
+            # The bundle lookup queries by trigger_category + active on every
+            # product-detail bundle fetch.
+            IndexModel([("trigger_category", ASCENDING), ("active", ASCENDING)],
+                       name="idx_bundle_rules_category"),
         ]),
     ]
 

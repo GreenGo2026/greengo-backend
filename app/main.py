@@ -66,6 +66,7 @@ from app.routes.dev             import router as dev_router
 from app.routes.auth_customer   import router as customer_auth_router
 from app.routes.baskets         import router as baskets_router
 from app.routes.flash_deals     import router as flash_deals_router
+from app.routes.bundles         import router as bundles_router
 from app.routes.cart_sessions   import router as cart_sessions_router
 
 # ---------------------------------------------------------------------------
@@ -680,6 +681,7 @@ app.include_router(dev_router)
 app.include_router(customer_auth_router)
 app.include_router(baskets_router)
 app.include_router(flash_deals_router)
+app.include_router(bundles_router)
 app.include_router(cart_sessions_router)
 
 
