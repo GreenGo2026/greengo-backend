@@ -63,6 +63,7 @@ from app.routes.recipes         import router as recipes_router
 from app.routes.shared_carts    import router as shared_carts_router
 from app.routes.livreur         import admin_drivers_router, livreur_router
 from app.routes.dev             import router as dev_router
+from app.routes.auth_customer   import router as customer_auth_router
 from app.routes.cart_sessions   import router as cart_sessions_router
 
 # ---------------------------------------------------------------------------
@@ -670,6 +671,7 @@ app.include_router(shared_carts_router)
 app.include_router(admin_drivers_router)
 app.include_router(livreur_router)
 app.include_router(dev_router)
+app.include_router(customer_auth_router)
 app.include_router(cart_sessions_router)
 
 

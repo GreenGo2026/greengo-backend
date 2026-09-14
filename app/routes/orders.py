@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from bson import ObjectId
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request
 from pydantic import BaseModel, Field, AliasChoices
 
 import io
@@ -18,6 +18,7 @@ from app.database import orders_col, customers_col, products_col, paniers_col, d
 from app.services.audit import ORDER_TRACKED_FIELDS, _compute_diff, actor_id, log_change, request_ip
 from app.services.notifications import send_and_log, notify_customer_and_log, notify_admin_and_log
 from app.services.whatsapp import build_referral_code_message, build_referral_reward_message
+from app.routes.auth_customer import verify_customer_jwt, _normalize_phone as _auth_normalize_phone
 from app.routes.challenges import check_challenges_and_notify
 
 router = APIRouter(prefix="/api/v1/orders", tags=["Orders"])
@@ -232,7 +233,11 @@ async def _server_product_info(
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @router.post("", response_model=OrderResponse, status_code=201, summary="Place a new order")
-async def create_order(payload: CreateOrderPayload, background_tasks: BackgroundTasks) -> OrderResponse:
+async def create_order(
+    payload: CreateOrderPayload,
+    background_tasks: BackgroundTasks,
+    authorization: str | None = Header(default=None),
+) -> OrderResponse:
 
     col      = orders_col()
     cust_col = customers_col()
@@ -295,10 +300,27 @@ async def create_order(payload: CreateOrderPayload, background_tasks: Background
     # result, so the amount charged and the balance can never diverge --
     # previously points were deducted while final_total was left untouched, so
     # redeeming cost the customer points and discounted nothing.
+    # Loyalty redemption is soft-gated to a verified phone owner. The amount
+    # is already server-clamped by _resolve_points_redemption below -- this
+    # gate isn't about trusting the number, it's about not letting whoever
+    # typed a stranger's phone into checkout spend that stranger's points.
+    # No JWT / mismatched phone just silently disables redemption; it never
+    # blocks the order.
+    use_points = payload.use_points
+    points_used = payload.points_used
+    if use_points:
+        try:
+            token = (authorization or "").removeprefix("Bearer ").strip()
+            customer_phone = verify_customer_jwt(token)
+            if _auth_normalize_phone(customer_phone) != _auth_normalize_phone(phone_key):
+                use_points, points_used = False, 0
+        except Exception:
+            use_points, points_used = False, 0
+
     points_balance = int((existing_customer or {}).get("total_points") or 0)
     points_redeemed, points_discount = _resolve_points_redemption(
-        use_points     = payload.use_points,
-        points_used    = payload.points_used,
+        use_points     = use_points,
+        points_used    = points_used,
         points_balance = points_balance,
         server_total   = server_total,
         final_total    = final_total,
