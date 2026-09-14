@@ -232,12 +232,27 @@ async def _server_product_info(
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
-@router.post("", response_model=OrderResponse, status_code=201, summary="Place a new order")
-async def create_order(
+async def _create_order_internal(
     payload: CreateOrderPayload,
-    background_tasks: BackgroundTasks,
-    authorization: str | None = Header(default=None),
+    background_tasks: "BackgroundTasks | None" = None,
+    authorization: str | None = None,
 ) -> OrderResponse:
+    """
+    Core order creation logic -- price/fee/loyalty resolution, order insert,
+    customer upsert, referral/challenge side effects, WhatsApp notifications.
+
+    Called by:
+      - POST /orders (HTTP route below, thin wrapper)
+      - the WhatsApp basket-confirmation handler (app/routes/webhook.py)
+
+    background_tasks is optional so a non-HTTP caller can use this directly:
+    when None, a local BackgroundTasks is created and awaited inline before
+    returning (owns_bg below); when supplied by the HTTP route, FastAPI runs
+    it after the response is sent, same as before this function existed.
+    """
+    owns_bg = background_tasks is None
+    if background_tasks is None:
+        background_tasks = BackgroundTasks()
 
     col      = orders_col()
     cust_col = customers_col()
@@ -357,7 +372,7 @@ async def create_order(
         order_id = str(result.inserted_id)
         short_id = order_id[-6:].upper()
     except Exception:
-        raise HTTPException(status_code=500, detail="Failed to create order. Please try again.")
+        raise RuntimeError("Failed to create order. Please try again.")
 
     # ── 3. Loyalty — upsert customer & accumulate points ──────────────────────
     earned_points = _calculate_points(server_total)
@@ -485,6 +500,9 @@ async def create_order(
         total           = final_total,
     )
 
+    if owns_bg:
+        await background_tasks()
+
     return OrderResponse(
         order_id=order_id,
         status="Pending",
@@ -495,6 +513,18 @@ async def create_order(
         points_redeemed=points_redeemed,
         points_discount_applied=points_discount,
     )
+
+
+@router.post("", response_model=OrderResponse, status_code=201, summary="Place a new order")
+async def create_order(
+    payload: CreateOrderPayload,
+    background_tasks: BackgroundTasks,
+    authorization: str | None = Header(default=None),
+) -> OrderResponse:
+    try:
+        return await _create_order_internal(payload, background_tasks, authorization)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
 @router.get("", summary="List all orders (admin)")

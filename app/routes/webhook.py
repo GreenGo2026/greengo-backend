@@ -7,6 +7,7 @@ Returns HTTP 200 in < 2s to avoid Green-API timeout.
 """
 from __future__ import annotations
 
+import asyncio
 import ipaddress
 import logging
 import os
@@ -17,7 +18,7 @@ from typing import Any
 from fastapi import APIRouter, BackgroundTasks, Request
 from fastapi.responses import JSONResponse
 
-from app.database import whatsapp_orders_col
+from app.database import saved_baskets_col, customers_col, whatsapp_orders_col
 from app.services.whatsapp import send_whatsapp_message
 
 logger = logging.getLogger(__name__)
@@ -67,6 +68,78 @@ AUTO_REPLY = (
 )
 
 _replied_recently: set[str] = set()
+
+# ── Basket confirmation ("Panier Hebdomadaire") ───────────────────────────────
+# A driver-style reply -- "1" / "oui" / "نعم" -- to today's basket reminder
+# places that basket as a real order via the same validation/fee/loyalty path
+# as the checkout form. See app/routes/baskets.py for the reminder sweep and
+# app/routes/orders.py's _create_order_internal for the shared order logic.
+_BASKET_CONFIRM = {"1", "oui", "yes", "نعم", "واه", "ايه", "ok", "okay"}
+
+
+def _to_e164(raw_digits: str) -> str:
+    """Green-API's chatId gives bare digits ("212612345678"), no '+'. Every
+    other collection (customers, saved_baskets) keys on +212... -- normalize
+    before querying either."""
+    raw = raw_digits.strip()
+    return raw if raw.startswith("+") else "+" + raw
+
+
+async def _try_basket_confirmation(sender_phone_raw: str, body_text: str) -> bool:
+    """Returns True if the message was a basket confirmation (handled --
+    order created or a failure reply sent). False means "not a basket
+    reply, keep processing normally" (falls through to the existing
+    order-keyword / logging / auto-reply flow below)."""
+    if body_text.strip().lower() not in _BASKET_CONFIRM:
+        return False
+
+    phone = _to_e164(sender_phone_raw)
+    today_start = datetime.now(tz=timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+
+    basket = await saved_baskets_col().find_one(
+        {"phone": phone, "active": True, "reminder_sent_at": {"$gte": today_start}},
+        sort=[("reminder_sent_at", -1)],
+    )
+    if not basket:
+        return False  # no reminder sent today -- not a basket reply, don't swallow it
+
+    from app.routes.orders import _create_order_internal, CreateOrderPayload
+
+    customer = await customers_col().find_one({"phone": phone})
+    address = (
+        basket.get("delivery_address")
+        or (customer or {}).get("last_address", "")
+        or "Via WhatsApp"
+    )
+
+    try:
+        payload = CreateOrderPayload(
+            customer_name=(customer or {}).get("name", ""),
+            phone=phone,
+            address=address,
+            items=basket["items"],
+            total_price=sum(
+                i.get("price_per_unit", 0) * i.get("quantity", 1) for i in basket["items"]
+            ),
+            use_points=False,  # never auto-redeem loyalty points from a WhatsApp reply
+        )
+        result = await _create_order_internal(payload)
+    except Exception as exc:
+        logger.warning("[Webhook] basket confirmation order failed for %s: %s", phone, exc)
+        await asyncio.to_thread(
+            send_whatsapp_message, phone,
+            "❌ لم نتمكن من إنشاء طلبك. زور الموقع من فضلك: https://www.mygreengoo.com",
+        )
+        return True
+
+    order_id = result.order_id
+    await asyncio.to_thread(
+        send_whatsapp_message, phone,
+        f"✅ طلبك من سلة *{basket.get('name', '')}* وصلنا!\n"
+        f"رقم الطلب: #{order_id[-6:].upper()}\n"
+        f"تتبع طلبك: https://www.mygreengoo.com/orders/{order_id}/track",
+    )
+    return True
 
 
 def _send_reply_task(sender_phone: str) -> None:
@@ -163,6 +236,12 @@ async def whatsapp_webhook(
             message_text = message_data.get("textMessageData", {}).get("textMessage", "")
         elif msg_type == "extendedTextMessage":
             message_text = message_data.get("extendedTextMessageData", {}).get("text", "")
+
+        # ── Basket confirmation reply -- short-circuits before order-keyword
+        # logging and the generic auto-reply, since this is a handled action,
+        # not an inquiry. ─────────────────────────────────────────────────────
+        if message_text and await _try_basket_confirmation(sender_phone, message_text):
+            return JSONResponse(status_code=200, content={"ok": True, "handled": "basket_confirmation"})
 
         # ── Save to MongoDB ───────────────────────────────────────────────────
         looks_like_order = _looks_like_order(message_text)
