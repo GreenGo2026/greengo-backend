@@ -22,7 +22,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
 from app.auth import _jwt_secret
-from app.database import customers_col
+from app.database import customers_col, orders_col, products_col
 from app.services.whatsapp import send_whatsapp_message
 
 router = APIRouter(prefix="/api/v1/customers/auth", tags=["Customer Auth"])
@@ -138,6 +138,55 @@ async def get_my_profile(phone: str = Depends(require_customer)) -> dict:
         "first_order":   _iso(doc.get("first_order")),
         "last_order":    _iso(doc.get("last_order")),
     }
+
+
+@router.get("/me/essentials", summary="Top reordered items for authenticated customer")
+async def get_essentials(phone: str = Depends(require_customer)) -> list[dict]:
+    """Aggregates past order items by frequency. Returns up to 8 most-ordered
+    product names with last known price/unit, enriched with live in_stock
+    status from the catalog. Order items are keyed on name_ar (see
+    _server_product_info in orders.py), so the enrichment lookup matches on
+    the same field."""
+    pipeline = [
+        {"$match": {"phone": phone}},
+        {"$unwind": "$items"},
+        {"$group": {
+            "_id":        "$items.name",
+            "count":      {"$sum": 1},
+            "last_price": {"$last": "$items.price_per_unit"},
+            "last_unit":  {"$last": "$items.unit"},
+            "last_image": {"$last": "$items.image_url"},
+        }},
+        {"$sort":  {"count": -1}},
+        {"$limit": 8},
+        {"$project": {
+            "_id":             0,
+            "name":            "$_id",
+            "count":           1,
+            "price_per_unit":  "$last_price",
+            "unit":            "$last_unit",
+            "image_url":       "$last_image",
+        }},
+    ]
+    results = await orders_col().aggregate(pipeline).to_list(length=8)
+
+    enriched: list[dict] = []
+    for item in results:
+        # Catalog's canonical price field is price_mad, not price_per_unit --
+        # see products.py's own note that name_ar/price_mad/in_stock is the
+        # canonical schema. The order item's price_per_unit is the fallback.
+        product = await products_col().find_one(
+            {"name_ar": item["name"]},
+            {"in_stock": 1, "image_url": 1, "price_mad": 1},
+        )
+        enriched.append({
+            **item,
+            "in_stock":       product.get("in_stock", True) if product else True,
+            "image_url":      (product or {}).get("image_url") or item.get("image_url") or "",
+            "price_per_unit": (product or {}).get("price_mad") or item.get("price_per_unit") or 0,
+        })
+
+    return enriched
 
 
 def _otp_expired(expires_at) -> bool:
