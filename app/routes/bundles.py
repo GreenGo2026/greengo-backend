@@ -107,7 +107,9 @@ async def list_rules(_: None = Depends(require_admin)) -> list[dict[str, Any]]:
 async def create_rule(payload: BundleRulePayload, _: None = Depends(require_admin)) -> dict[str, Any]:
     doc = {**payload.model_dump(), "created_at": datetime.now(tz=timezone.utc)}
     result = await bundle_rules_col().insert_one(doc)
-    return {"id": str(result.inserted_id), **doc}
+    # insert_one mutates `doc` in place, adding a non-JSON-serializable
+    # ObjectId "_id" -- exclude it from the response.
+    return {"id": str(result.inserted_id), **{k: v for k, v in doc.items() if k != "_id"}}
 
 
 @router.delete("/api/v1/admin/bundle-rules/{rule_id}", status_code=204, summary="Delete a bundle rule (admin)")
