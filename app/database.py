@@ -116,6 +116,7 @@ def shared_carts_col()           -> AsyncIOMotorCollection: return _col("shared_
 def drivers_col()                -> AsyncIOMotorCollection: return _col("drivers")
 def cart_sessions_col()          -> AsyncIOMotorCollection: return _col("cart_sessions")
 def saved_baskets_col()          -> AsyncIOMotorCollection: return _col("saved_baskets")
+def flash_deals_col()            -> AsyncIOMotorCollection: return _col("flash_deals")
 
 
 # ---------------------------------------------------------------------------
@@ -215,6 +216,15 @@ async def _init_indexes() -> None:
             # Drives the weekly reminder sweep's candidate query.
             IndexModel([("active", ASCENDING), ("reminder_day", ASCENDING)],
                        name="idx_saved_basket_reminder"),
+        ]),
+        ("flash_deals", flash_deals_col(), [
+            # Drives both the public /flash-deals list and the expiry sweep.
+            IndexModel([("active", ASCENDING), ("expires_at", ASCENDING)],
+                       name="idx_flash_deals_active_expires"),
+            # The dual-discount guard (create/cancel/sweep) looks up "does this
+            # product already have an active deal" by this pair.
+            IndexModel([("product_name_ar", ASCENDING), ("active", ASCENDING)],
+                       name="idx_flash_deals_product_active"),
         ]),
     ]
 
