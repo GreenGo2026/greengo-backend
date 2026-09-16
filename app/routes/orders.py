@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from bson import ObjectId
+from bson.errors import InvalidId
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request
 from pydantic import BaseModel, Field, AliasChoices
 
@@ -546,6 +547,37 @@ async def list_orders(limit: int = 50, phone: str | None = None, _: None = Depen
     return docs
 
 
+async def _resolve_driver_location(doc: dict[str, Any], raw_status: str) -> dict[str, Any] | None:
+    """
+    Live driver location for the tracking page -- only surfaced while the
+    delivery is actually in progress, and only if the last ping isn't stale
+    (driver's app closed, phone died, etc. -- a frozen pin is worse than no
+    pin). Shared by /orders/track (the actual customer-facing lookup) and
+    GET /orders/{id}/tracking.
+    """
+    livreur_id = doc.get("assigned_livreur_id")
+    if not livreur_id or raw_status not in ("Out for Delivery", "Pending Confirmation"):
+        return None
+    try:
+        driver = await drivers_col().find_one({"_id": ObjectId(livreur_id)}, {"last_location": 1})
+    except (InvalidId, TypeError):
+        return None
+    loc = driver.get("last_location") if driver else None
+    if not loc or not loc.get("recorded_at"):
+        return None
+    recorded_at = loc["recorded_at"]
+    if recorded_at.tzinfo is None:
+        recorded_at = recorded_at.replace(tzinfo=timezone.utc)
+    age_seconds = (datetime.now(tz=timezone.utc) - recorded_at).total_seconds()
+    if age_seconds >= 180:
+        return None
+    return {
+        "lat":         loc["lat"],
+        "lng":         loc["lng"],
+        "recorded_at": recorded_at.isoformat(),
+    }
+
+
 # NOTE: this must stay declared before GET /{order_id} below -- FastAPI matches
 # routes in declaration order, so a request to /orders/track would otherwise be
 # swallowed by /{order_id} (with order_id="track") and always 404.
@@ -620,6 +652,8 @@ async def track_order_public(order_ref: str | None = None, phone: str | None = N
                 "variant_label":  it.get("variant_label"),
             })
 
+        driver_location = await _resolve_driver_location(d, raw_status)
+
         results.append({
             "order_ref":          str(d["_id"])[-6:].upper(),
             "status":             normalized_status,
@@ -632,6 +666,8 @@ async def track_order_public(order_ref: str | None = None, phone: str | None = N
             "driver_phone":       d.get("driver_phone") or None,
             "estimated_delivery": d.get("estimated_delivery") or None,
             "status_history":     history,
+            "driver_location":    driver_location,
+            "gps_coordinates":    d.get("gps_coordinates"),
         })
     return results
 
@@ -1112,9 +1148,13 @@ async def track_order(order_id: str) -> dict[str, Any]:
     raw_status = str(doc.get("status", "pending"))
     normalized_status = raw_status.lower().replace(" ", "_")
 
+    driver_location = await _resolve_driver_location(doc, raw_status)
+
     return {
         "order_id":           str(doc["_id"]),
         "status":             normalized_status,
+        "driver_location":    driver_location,
+        "gps_coordinates":    doc.get("gps_coordinates"),
         "driver_name":        doc.get("driver_name") or None,
         "driver_phone":       doc.get("driver_phone") or None,
         "estimated_delivery": doc.get("estimated_delivery") or None,

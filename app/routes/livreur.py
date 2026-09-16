@@ -872,6 +872,32 @@ async def livreur_set_availability(
     return {"is_available": payload.is_available}
 
 
+class LocationPayload(BaseModel):
+    latitude:  float = Field(ge=-90,  le=90)
+    longitude: float = Field(ge=-180, le=180)
+    order_id:  str  # the active delivery order being tracked
+
+
+@livreur_router.patch("/location", summary="Update driver live location during delivery")
+async def livreur_update_location(
+    payload: LocationPayload,
+    identity: LivreurIdentity = Depends(require_livreur),
+) -> dict[str, Any]:
+    now = datetime.now(tz=timezone.utc)
+    await drivers_col().update_one(
+        {"_id": ObjectId(identity.driver_id)},
+        {"$set": {
+            "last_location": {
+                "lat":         payload.latitude,
+                "lng":         payload.longitude,
+                "recorded_at": now,
+                "order_id":    payload.order_id,
+            }
+        }},
+    )
+    return {"updated": True, "recorded_at": now.isoformat()}
+
+
 @livreur_router.get("/profile", summary="Logged-in driver's profile")
 async def livreur_profile(identity: LivreurIdentity = Depends(require_livreur)) -> dict[str, Any]:
     doc = await _driver_doc(identity)
