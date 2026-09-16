@@ -728,10 +728,13 @@ async def update_order_status(
     if final_status not in allowed and final_status != current_status:
         raise HTTPException(
             status_code=400,
-            detail=(
-                f"Invalid transition: '{current_status}' -> '{final_status}'. "
-                f"Allowed: {allowed or ['none (terminal)']}"
-            ),
+            detail={
+                "error":     "invalid_transition",
+                "current":   current_status,
+                "requested": final_status,
+                "allowed":   allowed,
+                "message":   f"Cannot move from '{current_status}' to '{final_status}'.",
+            },
         )
 
     now = datetime.now(tz=timezone.utc)
