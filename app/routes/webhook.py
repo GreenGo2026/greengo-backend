@@ -15,14 +15,16 @@ import secrets
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, Request
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, BackgroundTasks, Request, Response
+from fastapi.responses import JSONResponse, PlainTextResponse
 
 from app.database import saved_baskets_col, customers_col, whatsapp_orders_col
 from app.services.whatsapp import send_whatsapp_message
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/webhook", tags=["Webhook"])
+
+META_VERIFY_TOKEN = os.getenv("META_WEBHOOK_VERIFY_TOKEN", "")
 
 # ── Known Green-API IP ranges (informational — token is the primary gate) ─────
 _ALLOWED_NETWORKS: list[ipaddress.IPv4Network] = [
@@ -269,3 +271,59 @@ async def whatsapp_webhook(
         logger.warning("[Webhook] Error processing webhook body: %s", exc)
 
     return JSONResponse(status_code=200, content={"ok": True})
+
+
+# ── Meta Cloud API webhook — coexists with the Green-API handler above while
+# the Meta cutover is being tested. Router already carries
+# prefix="/api/v1/webhook", so these register at /api/v1/webhook/meta. ────────
+
+@router.get("/meta", summary="Meta webhook verification (GET)")
+async def meta_webhook_verify(request: Request):
+    """
+    Meta calls this when the webhook URL is registered in Meta Business
+    Manager. Must echo back hub.challenge as plain text.
+    """
+    params    = request.query_params
+    mode      = params.get("hub.mode", "")
+    token     = params.get("hub.verify_token", "")
+    challenge = params.get("hub.challenge", "")
+
+    if mode == "subscribe" and token == META_VERIFY_TOKEN:
+        logger.info("[meta-webhook] verification successful")
+        return PlainTextResponse(challenge)
+
+    logger.warning("[meta-webhook] verification failed mode=%s token_match=%s", mode, token == META_VERIFY_TOKEN)
+    return Response(status_code=403)
+
+
+@router.post("/meta", summary="Meta webhook inbound messages (POST)")
+async def meta_webhook_inbound(request: Request):
+    """
+    Receives inbound WhatsApp messages from Meta Cloud API. Fans out to the
+    same basket-confirmation handler as the Green-API path. Anything not
+    handled here falls through -- Chatwoot receives it directly from Meta
+    if/when configured as a second webhook target, no forwarding needed.
+    """
+    try:
+        body  = await request.json()
+        entry = (body.get("entry") or [{}])[0]
+        value = (entry.get("changes") or [{}])[0].get("value", {})
+        msgs  = value.get("messages", [])
+
+        if not msgs:
+            return {"status": "no_message"}
+
+        msg   = msgs[0]
+        phone = "+" + msg.get("from", "")
+        text  = msg.get("text", {}).get("body", "").strip()
+
+        logger.info("[meta-webhook] inbound from=%s text=%s", phone, text[:50])
+
+        if text and await _try_basket_confirmation(phone, text):
+            return {"status": "basket_confirmed"}
+
+        return {"status": "ok"}
+
+    except Exception as exc:
+        logger.error("[meta-webhook] error: %s", exc)
+        return {"status": "error"}

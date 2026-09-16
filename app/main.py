@@ -691,11 +691,13 @@ app.include_router(cart_sessions_router)
 
 @app.get("/", tags=["Health"])
 async def health_check() -> dict:
+    from app.services.whatsapp import whatsapp_provider
     return {
-        "status":        "GreenGo API is running",
-        "version":       "2.0.0",
-        "environment":   _settings.APP_ENV,
-        "catalog_items": len(_CATALOG),
+        "status":            "GreenGo API is running",
+        "version":           "2.0.0",
+        "environment":       _settings.APP_ENV,
+        "catalog_items":     len(_CATALOG),
+        "whatsapp_provider": whatsapp_provider(),
     }
 
 

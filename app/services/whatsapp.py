@@ -1,13 +1,21 @@
 """
-Green-API WhatsApp service.
+WhatsApp service — Green-API by default, Meta Cloud API behind a flag.
 
 Public functions (all sync, never raise):
   send_whatsapp_message(phone, text)          — plain text to any number
+  send_whatsapp_template(phone, name, ...)    — Meta-approved template (Meta path only)
   send_file_by_url(phone, url, name, caption) — image/file with caption
   notify_customer_order(...)                  — builds + sends customer confirmation
   notify_admin_new_order(...)                 — builds + sends admin alert
   build_customer_order_message(...)           — pure text builder (no I/O), for logging/retry
   build_admin_order_message(...)              — pure text builder (no I/O), for logging/retry
+  whatsapp_provider()                         — "meta" or "green-api", for health checks
+
+Provider selection: USE_META_API=true routes send_whatsapp_message() through
+Meta Cloud API instead of Green-API. Every other function in this module
+(notify_customer_order, build_*, etc.) is untouched and already funnels
+through send_whatsapp_message(), so the flag propagates to all of them
+without any caller-side changes.
 """
 from __future__ import annotations
 
@@ -36,6 +44,109 @@ _BASE = (os.getenv("GREEN_API_URL") or "https://api.green-api.com").rstrip("/")
 _ADMIN_PHONE = os.getenv("ADMIN_WHATSAPP_PHONE", "")
 
 _TIMEOUT = 12
+
+# ── Meta Cloud API — feature-flagged, additive path ──────────────────────────
+_USE_META = os.getenv("USE_META_API", "false").strip().lower() == "true"
+_META_TOKEN      = os.getenv("META_WHATSAPP_TOKEN", "")
+_META_PHONE_ID   = os.getenv("META_PHONE_NUMBER_ID", "")
+_META_GRAPH_URL  = f"https://graph.facebook.com/v19.0/{_META_PHONE_ID}/messages"
+
+
+def _e164(phone: str) -> str:
+    """Normalize to E.164 without a leading '+' (e.g. '212612345678') —
+    the format Meta's Graph API expects in the "to" field."""
+    digits = "".join(c for c in phone if c.isdigit())
+    if digits.startswith("00"):
+        digits = digits[2:]
+    if digits.startswith("0") and len(digits) == 10:
+        return "212" + digits[1:]
+    if digits.startswith("212"):
+        return digits
+    return digits  # return as-is if unrecognised — let the API reject it
+
+
+def _send_meta_text(phone: str, message: str) -> bool:
+    """
+    Free-form text message via Meta Cloud API. Only works within the 24-hour
+    customer-service window (the customer messaged GreenGo first within 24h).
+    For outbound-only flows, use send_whatsapp_template() once Meta templates
+    are approved in Meta Business Manager.
+    """
+    if not _META_TOKEN or not _META_PHONE_ID:
+        logger.error("[meta-api] META_WHATSAPP_TOKEN or META_PHONE_NUMBER_ID not set")
+        return False
+    try:
+        import httpx
+        resp = httpx.post(
+            _META_GRAPH_URL,
+            headers={"Authorization": f"Bearer {_META_TOKEN}", "Content-Type": "application/json"},
+            json={
+                "messaging_product": "whatsapp",
+                "to":   _e164(phone),
+                "type": "text",
+                "text": {"body": message, "preview_url": False},
+            },
+            timeout=_TIMEOUT,
+        )
+        ok = resp.status_code == 200
+        if not ok:
+            logger.warning("[meta-api] send failed status=%s body=%s", resp.status_code, resp.text[:300])
+        return ok
+    except Exception as exc:
+        logger.error("[meta-api] exception: %s", exc)
+        return False
+
+
+def _send_meta_template(phone: str, template_name: str, lang: str = "ar", components: list | None = None) -> bool:
+    """
+    Template message via Meta Cloud API — no 24h window restriction.
+    Use for OTP codes, order confirmations, basket reminders. Template must
+    be pre-approved in Meta Business Manager.
+    """
+    if not _META_TOKEN or not _META_PHONE_ID:
+        logger.error("[meta-api] META_WHATSAPP_TOKEN or META_PHONE_NUMBER_ID not set")
+        return False
+    try:
+        import httpx
+        resp = httpx.post(
+            _META_GRAPH_URL,
+            headers={"Authorization": f"Bearer {_META_TOKEN}", "Content-Type": "application/json"},
+            json={
+                "messaging_product": "whatsapp",
+                "to":   _e164(phone),
+                "type": "template",
+                "template": {
+                    "name":       template_name,
+                    "language":   {"code": lang},
+                    "components": components or [],
+                },
+            },
+            timeout=_TIMEOUT,
+        )
+        ok = resp.status_code == 200
+        if not ok:
+            logger.warning("[meta-api] template failed status=%s body=%s", resp.status_code, resp.text[:300])
+        return ok
+    except Exception as exc:
+        logger.error("[meta-api] exception: %s", exc)
+        return False
+
+
+def send_whatsapp_template(phone: str, template_name: str, lang: str = "ar", components: list | None = None) -> bool:
+    """
+    Send a Meta-approved template message (Meta path only). Green-API has no
+    template concept, so this is a no-op there -- callers on that path should
+    keep using send_whatsapp_message() for now.
+    """
+    if _USE_META:
+        return _send_meta_template(phone, template_name, lang, components)
+    logger.warning("[whatsapp] send_whatsapp_template called on Green-API path — no-op (template: %s)", template_name)
+    return False
+
+
+def whatsapp_provider() -> str:
+    """Returns 'meta' or 'green-api' — surfaced on the health check endpoint."""
+    return "meta" if _USE_META else "green-api"
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
 
@@ -87,7 +198,15 @@ def format_moroccan_number(phone: str) -> str:
 
 
 def send_whatsapp_message(phone: str, message: str) -> bool:
-    """Send a plain text WhatsApp message. Never raises."""
+    """
+    Send a plain text WhatsApp message. Never raises.
+    Routes to Meta Cloud API when USE_META_API=true, Green-API otherwise --
+    every caller in this codebase (orders, baskets, OTP, livreur PIN,
+    referrals) goes through this one function, so the flag applies to all
+    of them with no caller-side changes.
+    """
+    if _USE_META:
+        return _send_meta_text(phone, message)
     if not _ready():
         return False
     return _post("sendMessage", {"chatId": _chat_id(phone), "message": message})
