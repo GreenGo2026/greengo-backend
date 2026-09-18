@@ -24,7 +24,6 @@ requirement -- do not relax the sub check in either place.
 """
 from __future__ import annotations
 
-import asyncio
 import os
 import re
 import secrets
@@ -43,7 +42,7 @@ from pydantic import BaseModel, Field
 
 from app.auth import client_ip as _client_ip, require_admin
 from app.database import drivers_col, orders_col
-from app.services.whatsapp import send_whatsapp_message
+from app.services.whatsapp import async_send_whatsapp_message
 
 admin_drivers_router = APIRouter(prefix="/api/v1/admin/drivers", tags=["Admin - Drivers"])
 livreur_router       = APIRouter(prefix="/api/v1/livreur",       tags=["Livreur"])
@@ -418,8 +417,7 @@ async def validate_driver(
         f"🔗 بوابة التوصيل: https://www.mygreengoo.com/livreur\n\n"
         f"لا تشارك هذا الكود مع أحد."
     )
-    # send_whatsapp_message is sync (requests) -- keep it off the event loop.
-    wa_sent = await asyncio.to_thread(send_whatsapp_message, driver.get("phone") or "", message)
+    wa_sent = await async_send_whatsapp_message(driver.get("phone") or "", message)
 
     return {
         "validated":     True,
@@ -492,7 +490,7 @@ async def resend_driver_pin(
         f"🔗 بوابة التوصيل: https://www.mygreengoo.com/livreur\n\n"
         f"لا تشارك هذا الكود مع أحد."
     )
-    wa_sent = await asyncio.to_thread(send_whatsapp_message, driver.get("phone") or "", message)
+    wa_sent = await async_send_whatsapp_message(driver.get("phone") or "", message)
 
     return {
         "resent":        True,

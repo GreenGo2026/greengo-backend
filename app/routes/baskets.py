@@ -134,8 +134,7 @@ async def send_basket_reminders() -> dict[str, Any]:
     and cart-recovery). Sends a WhatsApp reminder to every active basket whose
     reminder_day matches today and hasn't already been sent today.
     """
-    import asyncio
-    from app.services.whatsapp import send_whatsapp_message
+    from app.services.whatsapp import async_send_whatsapp_message
 
     now = datetime.now(tz=timezone.utc)
     today = now.strftime("%A").lower()  # "friday"
@@ -170,8 +169,9 @@ async def send_basket_reminders() -> dict[str, Any]:
             f"رقم السلة: `{bid}`"
         )
         try:
-            # send_whatsapp_message is sync (requests) -- keep it off the loop.
-            ok = await asyncio.to_thread(send_whatsapp_message, phone, message)
+            # Anti-ban queued send -- paces this loop over many customers
+            # instead of firing them back-to-back.
+            ok = await async_send_whatsapp_message(phone, message)
         except Exception:
             ok = False
 

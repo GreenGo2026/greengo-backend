@@ -1,7 +1,6 @@
 # app/routes/challenges.py
 from __future__ import annotations
 
-import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -133,20 +132,23 @@ async def get_challenges(phone: str = Query(...)) -> dict[str, Any]:
     }
 
 
-def check_challenges_and_notify(phone: str, order_id: str) -> None:
+async def check_challenges_and_notify(phone: str, order_id: str) -> None:
     """
-    Background-task-safe (call via background_tasks.add_task, never await
-    directly). Mirrors notifications.py's _run_and_log pattern: FastAPI runs
-    this in a worker thread since it's a plain sync function, so it's safe
-    to open its own event loop with asyncio.run() here -- and safe to make
-    the blocking send_whatsapp_message() call at the end, since that thread
-    isn't serving other requests.
+    Background-task-safe (call via background_tasks.add_task). FastAPI's
+    BackgroundTasks natively awaits async callables on the running app event
+    loop after the response is sent -- this used to be a sync function
+    wrapping asyncio.run() internally (needed back when it ran in a
+    threadpool with no event loop of its own), but that pattern creates and
+    tears down a fresh throwaway loop on every call, which breaks
+    whatsapp.py's anti-ban queue (a module-level worker that must stay bound
+    to one persistent loop for the app's whole lifetime). Being genuinely
+    async keeps this on that same stable loop.
 
     Checks this week's challenges for `phone`, credits any newly-completed
     ones, and sends one WhatsApp summary if any landed. Never raises --
     a challenge-tracking failure must not surface to the order response.
     """
-    async def _do() -> None:
+    try:
         week_start = get_week_start()
         week_end = week_start + timedelta(days=7)
 
@@ -172,18 +174,15 @@ def check_challenges_and_notify(phone: str, order_id: str) -> None:
             newly_completed.append(ch)
 
         if newly_completed:
-            from app.services.whatsapp import send_whatsapp_message
+            from app.services.whatsapp import async_send_whatsapp_message
             titles = " · ".join(c["title_fr"] for c in newly_completed)
             total_new_points = sum(c["points_reward"] for c in newly_completed)
-            send_whatsapp_message(
+            await async_send_whatsapp_message(
                 phone,
                 f"🎯 تحدي مكتمل!\n\n"
                 f"ربحتي *{total_new_points} نقطة*\n"
                 f"{titles}\n\n"
                 f"mygreengoo.com/mon-compte"
             )
-
-    try:
-        asyncio.run(_do())
     except Exception as exc:
         logger.error("Challenge check failed for %s: %s", phone, exc)

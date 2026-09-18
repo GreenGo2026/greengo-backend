@@ -19,9 +19,11 @@ without any caller-side changes.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
+import random
 from datetime import datetime, timezone
 from typing import Any
 
@@ -147,6 +149,83 @@ def send_whatsapp_template(phone: str, template_name: str, lang: str = "ar", com
 def whatsapp_provider() -> str:
     """Returns 'meta' or 'green-api' — surfaced on the health check endpoint."""
     return "meta" if _USE_META else "green-api"
+
+
+# ── Anti-ban send queue ────────────────────────────────────────────────────────
+# All outbound sends from async callers go through this queue instead of
+# firing immediately. A single worker drains it, enforcing a random 3-8s gap
+# between any two sends process-wide -- human-like pacing, never two
+# messages in the same instant, regardless of how many requests triggered
+# sends concurrently (a burst of orders, a wave of inbound replies, etc.).
+#
+# Lazily created on first use rather than at import time so it binds to
+# whatever event loop is actually running (uvicorn's, not a module-import-time
+# one). The check-then-create below has no `await` between the check and the
+# assignment, so it can't race under asyncio's single-threaded scheduling --
+# no lock needed.
+
+_send_queue: "asyncio.Queue | None" = None
+_queue_worker_started = False
+
+MIN_DELAY_SEC = 3.0
+MAX_DELAY_SEC = 8.0
+
+
+async def _queue_worker() -> None:
+    """Single async worker draining the send queue. Never raises -- logs and
+    keeps going on any error, including a malformed queue item."""
+    assert _send_queue is not None
+    while True:
+        item = await _send_queue.get()
+        try:
+            phone, message, future = item
+            try:
+                delay = random.uniform(MIN_DELAY_SEC, MAX_DELAY_SEC)
+                await asyncio.sleep(delay)
+                # send_whatsapp_message already branches on _USE_META
+                # internally -- no need to duplicate that here. It's a
+                # blocking call (requests/httpx sync) -- off the loop via
+                # to_thread so one slow send can't stall every other queued
+                # message (or the rest of the app) behind it.
+                result = await asyncio.to_thread(send_whatsapp_message, phone, message)
+            except Exception as exc:
+                logger.error("[wa-queue] send failed: %s", exc)
+                result = False
+            if not future.done():
+                future.set_result(result)
+        except Exception as exc:
+            logger.error("[wa-queue] worker error: %s", exc)
+        finally:
+            _send_queue.task_done()
+
+
+async def _enqueue_send(phone: str, message: str) -> bool:
+    """Enqueue a WhatsApp send and await its result (still paced -- the
+    caller waits for its turn in the queue, it just never fires early)."""
+    global _send_queue, _queue_worker_started
+    if _send_queue is None:
+        _send_queue = asyncio.Queue(maxsize=200)
+    if not _queue_worker_started:
+        asyncio.get_running_loop().create_task(_queue_worker())
+        _queue_worker_started = True
+
+    loop = asyncio.get_running_loop()
+    future: "asyncio.Future[bool]" = loop.create_future()
+    await _send_queue.put((phone, message, future))
+    return await future
+
+
+async def async_send_whatsapp_message(phone: str, message: str) -> bool:
+    """
+    Async, anti-ban-paced interface. Use this from any async caller
+    (FastAPI background tasks, route handlers) instead of
+    asyncio.to_thread(send_whatsapp_message, ...) or a direct sync call --
+    every send routed through here shares the same 3-8s process-wide
+    pacing, so a burst of orders/replies/reminders can never fire two
+    WhatsApp sends back-to-back.
+    """
+    return await _enqueue_send(phone, message)
+
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
 

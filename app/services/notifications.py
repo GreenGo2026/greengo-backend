@@ -1,7 +1,6 @@
 # app/services/notifications.py
 from __future__ import annotations
 
-import asyncio
 import logging
 import os
 from datetime import datetime
@@ -71,53 +70,54 @@ async def update_notification_status(
         logger.error("Failed to update notification %s: %s", notif_id, exc)
 
 
-# ── Sync wrappers for use with FastAPI BackgroundTasks ──────────────────────
-# whatsapp.py's send functions are synchronous by design (never raise, return
-# bool) -- these wrappers log + send + update status from within the same
-# background-task execution. BackgroundTasks runs sync callables in a worker
-# thread with no event loop of its own, so asyncio.run() here is safe (this
-# is NOT called from inside an already-running event loop).
+# ── Async, for use with FastAPI BackgroundTasks ──────────────────────────────
+# FastAPI's BackgroundTasks.add_task natively supports async callables --
+# it awaits them on the running app event loop after the response is sent,
+# same as it runs sync callables in a threadpool. These used to be sync
+# functions wrapping asyncio.run() internally (needed when they were plain
+# threadpool callables with no event loop of their own); now that the send
+# itself goes through whatsapp.py's anti-ban queue -- a module-level worker
+# that must stay bound to ONE persistent loop for its whole process
+# lifetime -- asyncio.run() would create and immediately tear down a fresh
+# throwaway loop on every single call, breaking the queue's Future/Queue
+# after the first invocation. Being real async functions keeps everything
+# on the one stable loop the queue worker actually lives on.
 
-def _run_and_log(
-    sender: Any,
-    sender_args: tuple,
+async def _send_and_log(
     recipient_phone: str,
     message: str,
     notification_type: str,
     order_id: Optional[str],
     order_ref: Optional[str],
 ) -> None:
-    async def _do() -> None:
-        notif_id = await log_notification(recipient_phone, message, notification_type, order_id, order_ref)
-        try:
-            ok = sender(*sender_args)
-            await update_notification_status(
-                notif_id,
-                NotifStatus.SENT if ok else NotifStatus.FAILED,
-                error=None if ok else "Green-API returned failure",
-            )
-        except Exception as exc:
-            await update_notification_status(notif_id, NotifStatus.FAILED, error=str(exc))
+    from app.services.whatsapp import async_send_whatsapp_message
 
+    notif_id = await log_notification(recipient_phone, message, notification_type, order_id, order_ref)
     try:
-        asyncio.run(_do())
+        ok = await async_send_whatsapp_message(recipient_phone, message)
+        await update_notification_status(
+            notif_id,
+            NotifStatus.SENT if ok else NotifStatus.FAILED,
+            error=None if ok else "Green-API returned failure",
+        )
     except Exception as exc:
         logger.error("Notification send/log crashed: %s", exc)
+        await update_notification_status(notif_id, NotifStatus.FAILED, error=str(exc))
 
 
-def send_and_log(
+async def send_and_log(
     phone: str,
     message: str,
     notification_type: str,
     order_id: Optional[str] = None,
     order_ref: Optional[str] = None,
 ) -> None:
-    """Background-task-safe replacement for send_whatsapp_message(phone, message)."""
-    from app.services.whatsapp import send_whatsapp_message
-    _run_and_log(send_whatsapp_message, (phone, message), phone, message, notification_type, order_id, order_ref)
+    """Background-task-safe, anti-ban-queued replacement for
+    send_whatsapp_message(phone, message)."""
+    await _send_and_log(phone, message, notification_type, order_id, order_ref)
 
 
-def notify_customer_and_log(_log_order_id: str, _log_order_ref: str, **kwargs: Any) -> None:
+async def notify_customer_and_log(_log_order_id: str, _log_order_ref: str, **kwargs: Any) -> None:
     """
     Background-task-safe replacement for notify_customer_order(**kwargs).
     Builds the real message text via build_customer_order_message() first so
@@ -125,7 +125,7 @@ def notify_customer_and_log(_log_order_id: str, _log_order_ref: str, **kwargs: A
     placeholder summary. The leading params are prefixed (_log_*) so they
     can't collide with the order_id kwarg forwarded to the builder.
     """
-    from app.services.whatsapp import build_customer_order_message, send_whatsapp_message
+    from app.services.whatsapp import build_customer_order_message
     phone = kwargs.get("phone", "")
     text = build_customer_order_message(
         customer_name=kwargs.get("customer_name", ""),
@@ -139,16 +139,16 @@ def notify_customer_and_log(_log_order_id: str, _log_order_ref: str, **kwargs: A
         earned_points=kwargs.get("earned_points", 0),
         total_points=kwargs.get("total_points", 0),
     )
-    _run_and_log(send_whatsapp_message, (phone, text), phone, text, "order_confirm", _log_order_id, _log_order_ref)
+    await _send_and_log(phone, text, "order_confirm", _log_order_id, _log_order_ref)
 
 
-def notify_admin_and_log(_log_order_id: str, _log_order_ref: str, **kwargs: Any) -> None:
+async def notify_admin_and_log(_log_order_id: str, _log_order_ref: str, **kwargs: Any) -> None:
     """
     Background-task-safe replacement for notify_admin_new_order(**kwargs).
     Same real-text logging as notify_customer_and_log, via
     build_admin_order_message().
     """
-    from app.services.whatsapp import build_admin_order_message, send_whatsapp_message
+    from app.services.whatsapp import build_admin_order_message
     admin_phone = os.getenv("ADMIN_WHATSAPP_PHONE", "")
     if not admin_phone:
         return  # matches notify_admin_new_order()'s own early-return behavior
@@ -164,7 +164,7 @@ def notify_admin_and_log(_log_order_id: str, _log_order_ref: str, **kwargs: Any)
         delivery_fee=kwargs.get("delivery_fee", 0.0),
         total=kwargs.get("total", 0.0),
     )
-    _run_and_log(send_whatsapp_message, (admin_phone, text), admin_phone, text, "admin_alert", _log_order_id, _log_order_ref)
+    await _send_and_log(admin_phone, text, "admin_alert", _log_order_id, _log_order_ref)
 
 
 # ── Green-API status check ───────────────────────────────────────────────────

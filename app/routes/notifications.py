@@ -6,7 +6,6 @@ from typing import Any
 
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, Query
-from starlette.concurrency import run_in_threadpool
 
 from app.auth import require_admin
 from app.database import notifications_col
@@ -87,15 +86,13 @@ async def retry_notification(notif_id: str, _: None = Depends(require_admin)) ->
             detail=f"Can only retry failed notifications. Current status: {notif.get('status')}",
         )
 
-    # send_whatsapp_message is sync (requests, not httpx) -- run it off the
-    # event loop rather than blocking this async request handler on it.
-    from app.services.whatsapp import send_whatsapp_message
+    from app.services.whatsapp import async_send_whatsapp_message
 
     phone   = notif.get("recipient_phone", "")
     message = notif.get("message", "")
 
     try:
-        ok = await run_in_threadpool(send_whatsapp_message, phone, message)
+        ok = await async_send_whatsapp_message(phone, message)
     except Exception as exc:
         ok = False
         error = str(exc)

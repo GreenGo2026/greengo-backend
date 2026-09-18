@@ -1,23 +1,32 @@
 # app/routes/whatsapp_admin.py — admin endpoint to broadcast product catalog via Green-API
 from __future__ import annotations
 
-import time
+import asyncio
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query
 
 from app.auth import require_admin
 from app.database import products_col
-from app.services.whatsapp import send_file_by_url, send_whatsapp_message
+from app.services.whatsapp import send_file_by_url, async_send_whatsapp_message
 
 router = APIRouter(prefix="/api/v1/admin/whatsapp", tags=["WhatsApp Admin"])
 
 
 # ── Background task ───────────────────────────────────────────────────────────
 
-def _broadcast_catalog(phone: str, products: list[dict[str, Any]]) -> None:
+async def _broadcast_catalog(phone: str, products: list[dict[str, Any]]) -> None:
     """
-    Sync background task — runs in FastAPI's thread pool.
+    Background task -- FastAPI's BackgroundTasks awaits async callables
+    directly on the running app event loop. Previously this was a plain
+    sync function (run in a threadpool) using a blocking time.sleep(1.5)
+    between sends; now async so the final grouped-text message can go
+    through the anti-ban queue (which needs a persistent loop, not a
+    throwaway per-call one). send_file_by_url is still a blocking/sync
+    call, so it's kept off the loop via asyncio.to_thread, and the pacing
+    sleep is now asyncio.sleep -- neither blocks the app during a large
+    broadcast (this can run for several minutes).
+
     Sends each product to `phone` via Green-API:
       • Products with image  → sendFileByUrl (image + name + price caption)
       • Products without image → collected in a text summary at the end
@@ -33,8 +42,8 @@ def _broadcast_catalog(phone: str, products: list[dict[str, Any]]) -> None:
         unit  = p.get("unit") or "kg"
         url   = (p.get("image_url") or "").strip()
         caption = f"🌿 *{name}*\n💰 {price:.2f} MAD / {unit}"
-        send_file_by_url(phone, url, f"{name}.jpg", caption)
-        time.sleep(1.5)
+        await asyncio.to_thread(send_file_by_url, phone, url, f"{name}.jpg", caption)
+        await asyncio.sleep(1.5)
 
     # 2. Products without images — one grouped text message
     if without_img:
@@ -49,7 +58,7 @@ def _broadcast_catalog(phone: str, products: list[dict[str, Any]]) -> None:
             price = float(p.get("price_mad") or 0)
             unit  = p.get("unit") or ""
             lines.append(f"  ▪ {name} — {price:.2f} MAD/{unit}")
-        send_whatsapp_message(phone, "\n".join(lines))
+        await async_send_whatsapp_message(phone, "\n".join(lines))
 
 
 # ── Route ─────────────────────────────────────────────────────────────────────

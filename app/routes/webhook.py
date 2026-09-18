@@ -7,7 +7,6 @@ Returns HTTP 200 in < 2s to avoid Green-API timeout.
 """
 from __future__ import annotations
 
-import asyncio
 import ipaddress
 import logging
 import os
@@ -19,7 +18,7 @@ from fastapi import APIRouter, BackgroundTasks, Request, Response
 from fastapi.responses import JSONResponse, PlainTextResponse
 
 from app.database import saved_baskets_col, customers_col, whatsapp_orders_col, orders_col
-from app.services.whatsapp import send_whatsapp_message
+from app.services.whatsapp import async_send_whatsapp_message
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/webhook", tags=["Webhook"])
@@ -90,12 +89,17 @@ def _to_e164(raw_digits: str) -> str:
 _REVIEW_SCORES = {"1", "2", "3", "4", "5"}
 
 
-async def _try_review_reply(phone: str, body_text: str) -> bool:
+async def _try_review_reply(phone: str, body_text: str, background_tasks: BackgroundTasks) -> bool:
     """Returns True if the message was a 1-5 review-score reply (handled --
     score stored, product ratings recomputed, thank-you sent). Checked
     before _try_basket_confirmation since "1" also appears in
     _BASKET_CONFIRM -- only intercepted here if this phone actually has a
-    pending review request, so a real basket "1" reply isn't swallowed."""
+    pending review request, so a real basket "1" reply isn't swallowed.
+
+    The reply itself is scheduled via background_tasks (not awaited inline)
+    so the anti-ban queue's 3-8s pacing can't delay the webhook's own HTTP
+    response -- Green-API expects < 2s or it may consider the webhook dead
+    and retry."""
     score_str = body_text.strip()
     if score_str not in _REVIEW_SCORES:
         return False
@@ -127,15 +131,17 @@ async def _try_review_reply(phone: str, body_text: str) -> bool:
         f"رأيك يساعدنا نحسّنو خدمتنا لك \U0001F49A\n"
         f"نتلاقاو في الطلبية الجاية! \U0001F6D2"
     )
-    await asyncio.to_thread(send_whatsapp_message, phone, message)
+    background_tasks.add_task(async_send_whatsapp_message, phone, message)
     return True
 
 
-async def _try_basket_confirmation(sender_phone_raw: str, body_text: str) -> bool:
+async def _try_basket_confirmation(sender_phone_raw: str, body_text: str, background_tasks: BackgroundTasks) -> bool:
     """Returns True if the message was a basket confirmation (handled --
     order created or a failure reply sent). False means "not a basket
     reply, keep processing normally" (falls through to the existing
-    order-keyword / logging / auto-reply flow below)."""
+    order-keyword / logging / auto-reply flow below). Reply sends are
+    scheduled via background_tasks -- see _try_review_reply's docstring for
+    why they aren't awaited inline."""
     if body_text.strip().lower() not in _BASKET_CONFIRM:
         return False
 
@@ -172,15 +178,15 @@ async def _try_basket_confirmation(sender_phone_raw: str, body_text: str) -> boo
         result = await _create_order_internal(payload)
     except Exception as exc:
         logger.warning("[Webhook] basket confirmation order failed for %s: %s", phone, exc)
-        await asyncio.to_thread(
-            send_whatsapp_message, phone,
+        background_tasks.add_task(
+            async_send_whatsapp_message, phone,
             "❌ لم نتمكن من إنشاء طلبك. زور الموقع من فضلك: https://www.mygreengoo.com",
         )
         return True
 
     order_id = result.order_id
-    await asyncio.to_thread(
-        send_whatsapp_message, phone,
+    background_tasks.add_task(
+        async_send_whatsapp_message, phone,
         f"✅ طلبك من سلة *{basket.get('name', '')}* وصلنا!\n"
         f"رقم الطلب: #{order_id[-6:].upper()}\n"
         f"تتبع طلبك: https://www.mygreengoo.com/orders/{order_id}/track",
@@ -188,15 +194,17 @@ async def _try_basket_confirmation(sender_phone_raw: str, body_text: str) -> boo
     return True
 
 
-def _send_reply_task(sender_phone: str) -> None:
-    """Background task — fires after HTTP 200 is returned to Green-API."""
+async def _send_reply_task(sender_phone: str) -> None:
+    """Background task — fires after HTTP 200 is returned to Green-API.
+    Already deferred (BackgroundTasks), so routing through the anti-ban
+    queue here adds no response-time risk."""
     if sender_phone in _replied_recently:
         logger.info("[Webhook] Skipping duplicate reply to %s", sender_phone)
         return
     _replied_recently.add(sender_phone)
     if len(_replied_recently) > 500:
         _replied_recently.clear()
-    success = send_whatsapp_message(sender_phone, AUTO_REPLY)
+    success = await async_send_whatsapp_message(sender_phone, AUTO_REPLY)
     if success:
         logger.info("[Webhook] Auto-reply sent to %s", sender_phone)
     else:
@@ -289,9 +297,9 @@ async def whatsapp_webhook(
         # "1" is a valid value in both _REVIEW_SCORES and _BASKET_CONFIRM,
         # disambiguated by whether this phone actually has a pending review
         # request. ─────────────────────────────────────────────────────────
-        if message_text and await _try_review_reply(_to_e164(sender_phone), message_text):
+        if message_text and await _try_review_reply(_to_e164(sender_phone), message_text, background_tasks):
             return JSONResponse(status_code=200, content={"ok": True, "handled": "review_recorded"})
-        if message_text and await _try_basket_confirmation(sender_phone, message_text):
+        if message_text and await _try_basket_confirmation(sender_phone, message_text, background_tasks):
             return JSONResponse(status_code=200, content={"ok": True, "handled": "basket_confirmation"})
 
         # ── Save to MongoDB ───────────────────────────────────────────────────
@@ -346,7 +354,7 @@ async def meta_webhook_verify(request: Request):
 
 
 @router.post("/meta", summary="Meta webhook inbound messages (POST)")
-async def meta_webhook_inbound(request: Request):
+async def meta_webhook_inbound(request: Request, background_tasks: BackgroundTasks):
     """
     Receives inbound WhatsApp messages from Meta Cloud API. Fans out to the
     same basket-confirmation handler as the Green-API path. Anything not
@@ -368,9 +376,9 @@ async def meta_webhook_inbound(request: Request):
 
         logger.info("[meta-webhook] inbound from=%s text=%s", phone, text[:50])
 
-        if text and await _try_review_reply(phone, text):
+        if text and await _try_review_reply(phone, text, background_tasks):
             return {"status": "review_recorded"}
-        if text and await _try_basket_confirmation(phone, text):
+        if text and await _try_basket_confirmation(phone, text, background_tasks):
             return {"status": "basket_confirmed"}
 
         return {"status": "ok"}

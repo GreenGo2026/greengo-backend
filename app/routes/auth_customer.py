@@ -10,7 +10,6 @@ customer to prove they own a phone number, nothing else changes.
 """
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import secrets
 import time
@@ -23,7 +22,7 @@ from pydantic import BaseModel, Field
 
 from app.auth import _jwt_secret
 from app.database import customers_col, orders_col, products_col
-from app.services.whatsapp import send_whatsapp_message
+from app.services.whatsapp import async_send_whatsapp_message
 
 router = APIRouter(prefix="/api/v1/customers/auth", tags=["Customer Auth"])
 
@@ -228,8 +227,10 @@ async def request_otp(payload: OTPRequestPayload) -> dict:
         f"*{otp}*\n\n"
         f"صالح لمدة {_OTP_TTL_MIN} دقائق. لا تشاركه مع أحد."
     )
-    # send_whatsapp_message is sync (requests) -- keep it off the event loop.
-    wa_sent = await asyncio.to_thread(send_whatsapp_message, phone, message)
+    # Anti-ban queued send -- adds up to ~8s of latency to OTP delivery
+    # (queue pacing applies here same as everywhere else), acceptable
+    # tradeoff vs. burst-sending during a login wave.
+    wa_sent = await async_send_whatsapp_message(phone, message)
 
     return {"sent": True, "phone": phone, "whatsapp_sent": bool(wa_sent)}
 

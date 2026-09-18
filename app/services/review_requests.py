@@ -19,11 +19,10 @@ path already belong to the unrelated customer-testimonial system
 """
 from __future__ import annotations
 
-import asyncio
 from datetime import datetime, timedelta, timezone
 
 from app.database import orders_col, products_col
-from app.services.whatsapp import send_whatsapp_message
+from app.services.whatsapp import async_send_whatsapp_message
 
 
 async def send_review_requests() -> dict[str, int]:
@@ -51,7 +50,7 @@ async def send_review_requests() -> dict[str, int]:
             f"1 = ضعيف جداً  2 = ضعيف  3 = معقول  4 = جيد  5 = ممتاز\n\n"
             f"ردّ بالرقم فقط (1-5) \U0001F64F"
         )
-        sent = await asyncio.to_thread(send_whatsapp_message, phone, message)
+        sent = await async_send_whatsapp_message(phone, message)
         if sent:
             await orders_col().update_one(
                 {"_id": order["_id"]},
