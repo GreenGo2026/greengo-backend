@@ -18,7 +18,7 @@ from typing import Any
 from fastapi import APIRouter, BackgroundTasks, Request, Response
 from fastapi.responses import JSONResponse, PlainTextResponse
 
-from app.database import saved_baskets_col, customers_col, whatsapp_orders_col
+from app.database import saved_baskets_col, customers_col, whatsapp_orders_col, orders_col
 from app.services.whatsapp import send_whatsapp_message
 
 logger = logging.getLogger(__name__)
@@ -85,6 +85,50 @@ def _to_e164(raw_digits: str) -> str:
     before querying either."""
     raw = raw_digits.strip()
     return raw if raw.startswith("+") else "+" + raw
+
+
+_REVIEW_SCORES = {"1", "2", "3", "4", "5"}
+
+
+async def _try_review_reply(phone: str, body_text: str) -> bool:
+    """Returns True if the message was a 1-5 review-score reply (handled --
+    score stored, product ratings recomputed, thank-you sent). Checked
+    before _try_basket_confirmation since "1" also appears in
+    _BASKET_CONFIRM -- only intercepted here if this phone actually has a
+    pending review request, so a real basket "1" reply isn't swallowed."""
+    score_str = body_text.strip()
+    if score_str not in _REVIEW_SCORES:
+        return False
+
+    score = int(score_str)
+    now = datetime.now(tz=timezone.utc)
+
+    order = await orders_col().find_one(
+        {"phone": phone, "review_sent_at": {"$ne": None}, "review_score": None},
+        sort=[("review_sent_at", -1)],
+    )
+    if not order:
+        return False
+
+    await orders_col().update_one(
+        {"_id": order["_id"]},
+        {"$set": {"review_score": score, "review_received_at": now}},
+    )
+
+    from app.services.review_requests import _update_product_rating
+    for item in order.get("items", []):
+        name = item.get("name", "")
+        if name:
+            await _update_product_rating(name)
+
+    stars = "⭐" * score
+    message = (
+        f"شكراً {order.get('customer_name','')} على تقييمك {stars}\n\n"
+        f"رأيك يساعدنا نحسّنو خدمتنا لك \U0001F49A\n"
+        f"نتلاقاو في الطلبية الجاية! \U0001F6D2"
+    )
+    await asyncio.to_thread(send_whatsapp_message, phone, message)
+    return True
 
 
 async def _try_basket_confirmation(sender_phone_raw: str, body_text: str) -> bool:
@@ -239,9 +283,14 @@ async def whatsapp_webhook(
         elif msg_type == "extendedTextMessage":
             message_text = message_data.get("extendedTextMessageData", {}).get("text", "")
 
-        # ── Basket confirmation reply -- short-circuits before order-keyword
-        # logging and the generic auto-reply, since this is a handled action,
-        # not an inquiry. ─────────────────────────────────────────────────────
+        # ── Review score reply / basket confirmation -- both short-circuit
+        # before order-keyword logging and the generic auto-reply, since
+        # these are handled actions, not inquiries. Review check goes first:
+        # "1" is a valid value in both _REVIEW_SCORES and _BASKET_CONFIRM,
+        # disambiguated by whether this phone actually has a pending review
+        # request. ─────────────────────────────────────────────────────────
+        if message_text and await _try_review_reply(_to_e164(sender_phone), message_text):
+            return JSONResponse(status_code=200, content={"ok": True, "handled": "review_recorded"})
         if message_text and await _try_basket_confirmation(sender_phone, message_text):
             return JSONResponse(status_code=200, content={"ok": True, "handled": "basket_confirmation"})
 
@@ -319,6 +368,8 @@ async def meta_webhook_inbound(request: Request):
 
         logger.info("[meta-webhook] inbound from=%s text=%s", phone, text[:50])
 
+        if text and await _try_review_reply(phone, text):
+            return {"status": "review_recorded"}
         if text and await _try_basket_confirmation(phone, text):
             return {"status": "basket_confirmed"}
 

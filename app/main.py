@@ -523,12 +523,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     from app.routes.baskets import send_basket_reminders
     from app.routes.flash_deals import expire_flash_deals
     from app.services.loyalty import expire_stale_points
+    from app.services.review_requests import send_review_requests
     from app.services.scheduler import register_job, start_scheduler, stop_scheduler
 
     register_job("loyalty-expiry",    24 * 60 * 60, expire_stale_points)
     register_job("cart-recovery",     15 * 60,      send_cart_recovery_reminders)
     register_job("basket-reminder",   60 * 60,      send_basket_reminders)
     register_job("flash-deal-expiry", 5 * 60,       expire_flash_deals)
+    register_job("review-sweep",      10 * 60,      send_review_requests)
     _jobs = start_scheduler()
     if not _settings.CART_RECOVERY_ENABLED:
         print("STARTUP: cart recovery is in DRY RUN — set CART_RECOVERY_ENABLED=true to send.")

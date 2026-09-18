@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 import secrets
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from bson import ObjectId
@@ -295,9 +295,27 @@ async def _create_order_internal(
     welcome_discount = 0.0
     referrer_doc: dict[str, Any] | None = None
     existing_customer = await cust_col.find_one(
-        {"phone": phone_key}, {"_id": 1, "total_points": 1}
+        {"phone": phone_key},
+        {"_id": 1, "total_points": 1, "tier": 1, "payment_terms": 1, "credit_limit_mad": 1},
     )
     is_first_order = existing_customer is None
+
+    # ── 1e. B2B minimum order value ────────────────────────────────────────
+    # Reuses the customer lookup above rather than a second round-trip.
+    # Gated on final_total (server-computed from validated_items + delivery
+    # fee), not payload.total_price -- the client's total is never trusted
+    # anywhere else in this function, and trusting it here would let a
+    # client under-report total_price to slip under the MOV.
+    # HTTPException (not ValueError) -- the HTTP wrapper below only converts
+    # RuntimeError to a clean response, everything else falls through to an
+    # opaque 500, so this has to raise the structured error itself.
+    is_b2b = (existing_customer or {}).get("tier") == "b2b"
+    B2B_MOV_MAD = 500.0
+    if is_b2b and final_total < B2B_MOV_MAD:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Commande B2B minimum: {B2B_MOV_MAD} MAD (votre commande: {final_total:.2f} MAD)",
+        )
 
     if payload.referral_code and is_first_order:
         referrer_doc = await cust_col.find_one({"referral_code": payload.referral_code.strip().upper()})
@@ -363,6 +381,18 @@ async def _create_order_internal(
         "welcome_discount":   welcome_discount,
         "points_redeemed":    points_redeemed,
         "points_discount":    points_discount,
+        "order_tier":    "b2b" if is_b2b else "consumer",
+        "invoice_number": None,
+        "payment_due_date": (
+            now + timedelta(days=7 if (existing_customer or {}).get("payment_terms") == "net7" else 30)
+            if is_b2b and (existing_customer or {}).get("payment_terms") in ("net7", "net30")
+            else None
+        ),
+        "payment_status": "pending" if is_b2b else None,
+        "review_scheduled_at": None,
+        "review_sent_at":      None,
+        "review_score":        None,
+        "review_received_at":  None,
         "status":        "Pending",
         "created_at":    now,
         "updated_at":    now,
@@ -782,10 +812,18 @@ async def update_order_status(
         "note":       payload.note or "",
     }
 
+    status_update: dict[str, Any] = {"status": final_status, "updated_at": now}
+    if final_status == "Delivered" and current_status != "Delivered":
+        # Review sweep (app/services/review_requests.py) picks this up after
+        # a 2h grace period -- stamped here rather than in the sweep query
+        # itself so re-delivering (edge case) doesn't reschedule a request
+        # that already went out.
+        status_update["review_scheduled_at"] = now
+
     await col.update_one(
         {"_id": ObjectId(order_id)},
         {
-            "$set":  {"status": final_status, "updated_at": now},
+            "$set":  status_update,
             "$push": {"status_history": history_entry},
         },
     )
@@ -971,9 +1009,33 @@ async def download_invoice(order_id: str, lang: str = "fr"):
     if doc is None:
         raise HTTPException(status_code=404, detail=f"Order {order_id} not found.")
 
+    # B2B orders get an invoice number (assigned lazily, once, on first
+    # download) plus business/ICE/due-date fields joined from the customer
+    # doc. Consumer orders are untouched -- generate_invoice_pdf renders the
+    # exact same layout it always has when these fields are absent.
+    if doc.get("order_tier") == "b2b":
+        if not doc.get("invoice_number"):
+            year = datetime.now(tz=timezone.utc).year
+            count = await orders_col().count_documents(
+                {"order_tier": "b2b", "invoice_number": {"$exists": True, "$ne": None}}
+            )
+            inv_num = f"INV-{year}-{str(count + 1).zfill(5)}"
+            await orders_col().update_one({"_id": doc["_id"]}, {"$set": {"invoice_number": inv_num}})
+            doc["invoice_number"] = inv_num
+
+        customer = await customers_col().find_one(
+            {"phone": doc.get("phone", "")},
+            {"business_name": 1, "ice_number": 1},
+        )
+        if customer:
+            doc["business_name"] = customer.get("business_name")
+            doc["ice_number"]    = customer.get("ice_number")
+
     doc["_id"] = str(doc["_id"])
     if isinstance(doc.get("created_at"), datetime):
         doc["created_at"] = doc["created_at"].isoformat()
+    if isinstance(doc.get("payment_due_date"), datetime):
+        doc["payment_due_date"] = doc["payment_due_date"].isoformat()
 
     try:
         pdf_bytes = generate_invoice_pdf(doc, lang)

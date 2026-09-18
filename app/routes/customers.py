@@ -1,7 +1,8 @@
-from datetime import datetime
-from typing import Any, Optional
+from datetime import datetime, timezone
+from typing import Any, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from pydantic import BaseModel, Field
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from app.auth import require_admin
@@ -223,3 +224,37 @@ async def add_customer_note(
     }
     await col.update_one({"_id": doc["_id"]}, {"$push": {"notes": note_entry}})
     return {"status": "note added"}
+
+
+class B2BPromotePayload(BaseModel):
+    business_name:    str = Field(min_length=1)
+    ice_number:       str = ""
+    payment_terms:    Literal["cod", "net7", "net30"] = "net7"
+    credit_limit_mad: float = Field(default=500.0, ge=0)
+
+
+@router.patch("/{phone}/promote-b2b", summary="Promote customer to B2B tier (admin)")
+async def promote_b2b(
+    phone: str,
+    payload: B2BPromotePayload,
+    _: None = Depends(require_admin),
+) -> dict[str, Any]:
+    normalized = _normalize_phone(phone)
+    col = customers_col()
+    now = datetime.now(tz=timezone.utc)
+    result = await col.find_one_and_update(
+        {"phone": normalized},
+        {"$set": {
+            "tier":             "b2b",
+            "business_name":    payload.business_name.strip(),
+            "ice_number":       payload.ice_number.strip(),
+            "payment_terms":    payload.payment_terms,
+            "credit_limit_mad": payload.credit_limit_mad,
+            "outstanding_mad":  0.0,
+            "b2b_since":        now,
+        }},
+        return_document=True,
+    )
+    if not result:
+        raise HTTPException(status_code=404, detail="Customer not found.")
+    return {"promoted": True, "tier": "b2b", "phone": normalized}

@@ -89,6 +89,9 @@ _TR: dict[str, dict[str, str]] = {
         "bill_to":    "BILL TO",
         "date":       "Date",
         "ref":        "Order Ref",
+        "invoice_no": "Invoice No.",
+        "due_date":   "Due Date",
+        "ice":        "ICE",
         "product":    "Product",
         "qty":        "Qty",
         "unit":       "Unit",
@@ -107,6 +110,9 @@ _TR: dict[str, dict[str, str]] = {
         "bill_to":    "FACTURER A",
         "date":       "Date",
         "ref":        "Ref. Commande",
+        "invoice_no": "N Facture",
+        "due_date":   "Echeance",
+        "ice":        "ICE",
         "product":    "Produit",
         "qty":        "Qte",
         "unit":       "Unite",
@@ -125,6 +131,9 @@ _TR: dict[str, dict[str, str]] = {
         "bill_to":    "فاتورة إلى",
         "date":       "التاريخ",
         "ref":        "رقم الطلب",
+        "invoice_no": "رقم الفاتورة",
+        "due_date":   "تاريخ الاستحقاق",
+        "ice":        "ICE",
         "product":    "المنتج",
         "qty":        "الكمية",
         "unit":       "الوحدة",
@@ -241,6 +250,24 @@ def generate_invoice_pdf(order_data: dict[str, Any], lang: str | None = None) ->
     caddr  = order_data.get("address",          order_data.get("delivery_address", "---"))
     status = order_data.get("status", "pending")
 
+    # B2B-only fields -- absent on consumer orders, so every block below
+    # that reads these stays a no-op and the layout is unchanged for them.
+    invoice_number = order_data.get("invoice_number")
+    business_name  = order_data.get("business_name")
+    ice_number     = order_data.get("ice_number")
+    due_date_raw   = order_data.get("payment_due_date")
+    due_date_str   = ""
+    if due_date_raw:
+        try:
+            dd = due_date_raw
+            if isinstance(dd, str):
+                dd = datetime.fromisoformat(dd)
+            if dd.tzinfo is None:
+                dd = pytz.utc.localize(dd)
+            due_date_str = dd.astimezone(TZ_MA).strftime("%d/%m/%Y")
+        except Exception:
+            due_date_str = ""
+
     buf = io.BytesIO()
     doc = SimpleDocTemplate(
         buf, pagesize=A4,
@@ -274,6 +301,10 @@ def generate_invoice_pdf(order_data: dict[str, Any], lang: str | None = None) ->
 
     meta_txt = (f'{_t(lang, "ref")}: #{short_id}'
                 f'     {_t(lang, "date")}: {date_str}')
+    if invoice_number:
+        meta_txt += f'     {_t(lang, "invoice_no")}: {invoice_number}'
+    if due_date_str:
+        meta_txt += f'     {_t(lang, "due_date")}: {due_date_str}'
     tag  = _p(_t(lang, "tagline"), lang, st["tagline"])
     meta = _p(meta_txt, lang, st["invmeta"])
     m_row = [[meta, tag]] if is_ar else [[tag, meta]]
@@ -288,14 +319,20 @@ def generate_invoice_pdf(order_data: dict[str, Any], lang: str | None = None) ->
     els.append(HRFlowable(width="100%", thickness=2, color=G_GREEN, spaceAfter=5*mm))
 
     # ── 2. Bill-to ────────────────────────────────────────────────────────────
+    # B2B: business_name leads (with the contact person as a second line);
+    # consumer orders are unaffected since business_name is never set there.
     lpad = "RIGHTPADDING" if is_ar else "LEFTPADDING"
-    bill = [
-        [_p(_t(lang, "bill_to"),             lang, st["sec"]),    ""],
-        [_p(cname,                           lang, st["bbold"]),  ""],
-        [_p(f'{_t(lang,"phone")}: {cphone}', lang, st["body"]),   ""],
-        [_p(f'{_t(lang,"address")}: {caddr}',lang, st["body"]),   ""],
-        [_p(f'{_t(lang,"status")}: {status}',lang, st["status"]), ""],
-    ]
+    bill = [[_p(_t(lang, "bill_to"), lang, st["sec"]), ""]]
+    if business_name:
+        bill.append([_p(business_name, lang, st["bbold"]), ""])
+        bill.append([_p(cname,         lang, st["body"]),  ""])
+    else:
+        bill.append([_p(cname, lang, st["bbold"]), ""])
+    if ice_number:
+        bill.append([_p(f'{_t(lang,"ice")}: {ice_number}', lang, st["body"]), ""])
+    bill.append([_p(f'{_t(lang,"phone")}: {cphone}',  lang, st["body"]),   ""])
+    bill.append([_p(f'{_t(lang,"address")}: {caddr}', lang, st["body"]),   ""])
+    bill.append([_p(f'{_t(lang,"status")}: {status}', lang, st["status"]), ""])
     b_tbl = Table(bill, colWidths=[pw * .65, pw * .35])
     b_tbl.setStyle(TableStyle([
         (lpad,           (0,0),(-1,-1), 12),
