@@ -53,6 +53,12 @@ async def get_customer_public(phone: str, request: Request) -> dict:
         "total_points":   doc.get("total_points", 0),
         "segment":        doc.get("segment", "new"),
         "referral_code":  doc.get("referral_code"),
+        # Own-tier lookup -- the frontend needs this to unlock B2B checkout
+        # (MOV messaging, payment-terms display). Safe on the public endpoint
+        # since it's the customer's own data, unlike notes/other-customer
+        # fields which stay admin-only on GET /{phone} below.
+        "tier":           doc.get("tier", "consumer"),
+        "payment_terms":  doc.get("payment_terms"),
     }
 
 # NOTE: must stay declared before GET /{phone} below -- FastAPI matches routes
@@ -196,6 +202,14 @@ async def get_customer(phone: str, request: Request, _: None = Depends(require_a
         "orders":        order_history,
         "referral_code": doc.get("referral_code"),
         "referral_credits": doc.get("referral_credits", 0),
+        # B2B fields -- absent (None/default) on consumer docs.
+        "tier":              doc.get("tier", "consumer"),
+        "business_name":     doc.get("business_name"),
+        "ice_number":        doc.get("ice_number"),
+        "payment_terms":     doc.get("payment_terms"),
+        "credit_limit_mad":  doc.get("credit_limit_mad"),
+        "outstanding_mad":   doc.get("outstanding_mad"),
+        "b2b_since":         _iso(doc.get("b2b_since")) if doc.get("b2b_since") else None,
     }
 
 @router.post("/{phone}/notes", summary="Add an admin note to a customer profile")
